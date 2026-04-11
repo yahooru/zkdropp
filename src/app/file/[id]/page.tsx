@@ -138,6 +138,13 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     try {
       const price = Number(fromMicro(file.price));
 
+      // ⚠️ Non-atomic risk: credits transfer happens before access grant.
+      // If the access transaction fails, credits are lost. A future contract
+      // upgrade should handle escrow atomically.
+      if (price > 0) {
+        console.warn('[ZKDrop] Non-atomic payment: credits sent before access grant confirmed. TX may need manual resolution if access fails.');
+      }
+
       // Step 1: Pay credits if the file has a price
       if (price > 0) {
         setPayStep('transfer');
