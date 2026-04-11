@@ -152,8 +152,12 @@ export default function UploadPage() {
           txId: result.txId || null,
           fileId,
         }));
-      } else {
+      } else if (result.error && result.error.includes('user rejected')) {
+        throw new Error('Transaction cancelled by user.');
+      } else if (result.error) {
         throw new Error(result.error || 'Transaction failed — no txId returned');
+      } else {
+        throw new Error('Transaction failed — no txId and no error returned. Check wallet status.');
       }
     } catch (error) {
       console.error('Upload error:', error);
