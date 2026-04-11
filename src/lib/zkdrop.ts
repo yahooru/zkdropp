@@ -492,7 +492,7 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
  */
 export async function getFilesByIds(fileKeys: string[]): Promise<ZKDropFile[]> {
   const results = await Promise.all(
-    fileIds.map(id => getFileDetails(id))
+    fileKeys.map(key => getFileDetails(key))
   );
   return results.filter((f): f is ZKDropFile => f !== null);
 }
