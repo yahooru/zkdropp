@@ -463,8 +463,10 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
       getFileName(entry.fileKey),
     ]);
 
-    // Only include files owned by the connected address (strict equality)
-    if (owner && owner === address) {
+    // Only include files owned by the connected address (case-insensitive comparison)
+    const ownerLower = owner?.toLowerCase();
+    const addressLower = address?.toLowerCase();
+    if (ownerLower && addressLower && ownerLower === addressLower) {
       files.push({
         fileId: entry.fileId,
         fileKey: entry.fileKey,
