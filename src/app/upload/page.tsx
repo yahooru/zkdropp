@@ -127,6 +127,7 @@ export default function UploadPage() {
         2.0
       );
 
+      console.debug(`[ZKDrop] Upload result:`, result);
       if (result.txId) {
         // Store encryption key in localStorage
         storeEncryptionKey(fileId, { key: keyBase64, iv: ivBase64, originalName: state.file.name });
