@@ -32,7 +32,7 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
 
   const displayContent = mode === 'ipfs' && ipfsCid
     ? `IPFS: ${ipfsCid.slice(0, 20)}...`
-    : `ZKDrop: /file/${fileId}`;
+    : `ZKDrop: /file/${fileKey}`;
 
   useEffect(() => {
     if (!isOpen) return;
