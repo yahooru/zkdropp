@@ -1,0 +1,7 @@
+{
+  "program": "zkdrop_zkdrop_0001.aleo",
+  "version": "1.0.0",
+  "description": "ZKDrop - Privacy-first decentralized file sharing on Aleo",
+  "license": "MIT",
+  "dependencies": []
+}

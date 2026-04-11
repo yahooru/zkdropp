@@ -1,0 +1,722 @@
+{
+  "program": "zkdrop_v3_0001.aleo",
+  "structs": [],
+  "records": [
+    {
+      "path": [
+        "FileRecord"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "name",
+          "ty": {
+            "Array": {
+              "element": {
+                "Primitive": {
+                  "UInt": "U8"
+                }
+              },
+              "length": 64
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "ipfs_hash",
+          "ty": {
+            "Array": {
+              "element": {
+                "Primitive": {
+                  "UInt": "U8"
+                }
+              },
+              "length": 64
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "price",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "access_count",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "created_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_key",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "path": [
+        "AccessRecord"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Primitive": "Field"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "ipfs_hash",
+          "ty": {
+            "Array": {
+              "element": {
+                "Primitive": {
+                  "UInt": "U8"
+                }
+              },
+              "length": 64
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_name",
+          "ty": {
+            "Array": {
+              "element": {
+                "Primitive": {
+                  "UInt": "U8"
+                }
+              },
+              "length": 32
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "granted_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "expires_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "access_key",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        }
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "name": "file_counter",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "file_owners",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": "Address"
+      }
+    },
+    {
+      "name": "file_prices",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "file_counters",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "file_names",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Array": {
+          "element": {
+            "Primitive": {
+              "UInt": "U8"
+            }
+          },
+          "length": 32
+        }
+      }
+    },
+    {
+      "name": "file_created_at",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U32"
+        }
+      }
+    },
+    {
+      "name": "file_unix_ts",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "access_grants",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "access_granted_at",
+      "key": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U32"
+        }
+      }
+    }
+  ],
+  "storage_variables": [],
+  "functions": [
+    {
+      "name": "upload_file",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "name",
+          "ty": {
+            "Plaintext": {
+              "Array": {
+                "element": {
+                  "Primitive": {
+                    "UInt": "U8"
+                  }
+                },
+                "length": 64
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "ipfs_hash",
+          "ty": {
+            "Plaintext": {
+              "Array": {
+                "element": {
+                  "Primitive": {
+                    "UInt": "U8"
+                  }
+                },
+                "length": 64
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "price",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "unix_ts",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "request_access",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "ipfs_hash",
+          "ty": {
+            "Plaintext": {
+              "Array": {
+                "element": {
+                  "Primitive": {
+                    "UInt": "U8"
+                  }
+                },
+                "length": 64
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_name",
+          "ty": {
+            "Plaintext": {
+              "Array": {
+                "element": {
+                  "Primitive": {
+                    "UInt": "U8"
+                  }
+                },
+                "length": 64
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "access_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "unix_ts",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "AccessRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "revoke_access",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "access_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_record",
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "update_price",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "new_price",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_record",
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "delete_file",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_record",
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "update_name",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "file_key",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_id",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "new_name",
+          "ty": {
+            "Plaintext": {
+              "Array": {
+                "element": {
+                  "Primitive": {
+                    "UInt": "U8"
+                  }
+                },
+                "length": 64
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "file_record",
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "FileRecord"
+              ],
+              "program": "zkdrop_v3_0001.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    }
+  ]
+}

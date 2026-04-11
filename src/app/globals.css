@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #14532d;
+  --green-50: #f0fdf4;
+  --green-100: #dcfce7;
+  --green-200: #bbf7d0;
+  --green-300: #86efac;
+  --green-400: #4ade80;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+  --green-700: #15803d;
+  --green-800: #14532d;
+  --green-900: #052e16;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #22c55e #f0fdf4;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #f0fdf4;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #22c55e;
+  border-radius: 4px;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  background-color: #22c55e;
+  color: white;
+}
+
+/* Focus visible styles */
+:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Gradient text utility */
+.text-gradient {
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effect */
+.glow-green {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ─── Wallet Adapter Theme Overrides ─── */
+/* Override the default purple theme with our green palette */
+.wallet-adapter-modal {
+  --wallet-adapter-primary: #22c55e;
+  --wallet-adapter-primary-hover: #16a34a;
+  --wallet-adapter-primary-foreground: #ffffff;
+  --wallet-adapter-background: #ffffff;
+  --wallet-adapter-surface: #f0fdf4;
+  --wallet-adapter-surface-hover: #dcfce7;
+  --wallet-adapter-surface-light: #bbf7d0;
+  --wallet-adapter-text: #14532d;
+  --wallet-adapter-text-secondary: #15803d;
+  --wallet-adapter-border: #bbf7d0;
+  --wallet-adapter-border-light: #dcfce7;
+  --wallet-adapter-secondary: #22c55e;
+  --wallet-adapter-secondary-hover: #16a34a;
+  --wallet-adapter-accent-red: #ef4444;
+  --wallet-adapter-accent-blue: #3b82f6;
+  --wallet-adapter-accent-yellow: #f59e0b;
+  --wallet-adapter-accent-green: #22c55e;
+}
+
+/* Wallet adapter button — green themed */
+.wallet-adapter-button {
+  background-color: #22c55e !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+  font-family: inherit !important;
+}
+
+.wallet-adapter-button:hover:not([disabled]) {
+  background-color: #16a34a !important;
+}
+
+.wallet-adapter-button[disabled] {
+  background: #f0fdf4 !important;
+  color: #86efac !important;
+}
+
+/* Wallet adapter modal backdrop */
+.wallet-adapter-modal {
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Wallet adapter modal wrapper */
+.wallet-adapter-modal-wrapper {
+  background: #ffffff !important;
+  border: 1px solid #dcfce7 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Modal title */
+.wallet-adapter-modal-title {
+  color: #14532d !important;
+}
+
+/* Modal wallet list items */
+.wallet-adapter-modal-list .wallet-adapter-button {
+  background: #f0fdf4 !important;
+  border: 1px solid #dcfce7 !important;
+  color: #14532d !important;
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: #dcfce7 !important;
+  border-color: #22c55e !important;
+}
+
+/* Modal close button */
+.wallet-adapter-modal-button-close svg {
+  fill: #86efac !important;
+}
+
+.wallet-adapter-modal-button-close:hover svg {
+  fill: #22c55e !important;
+}
+
+/* Modal footer */
+.wallet-adapter-modal-footer {
+  color: #86efac !important;
+}
+
+/* Dropdown list */
+.wallet-adapter-dropdown-list {
+  background: #ffffff !important;
+  border: 1px solid #dcfce7 !important;
+}
+
+.wallet-adapter-dropdown-list-item {
+  color: #14532d !important;
+}
+
+.wallet-adapter-dropdown-list-item:hover {
+  background: #f0fdf4 !important;
+}
+
+/* Focus outlines */
+.wallet-adapter-button:focus-visible,
+.wallet-adapter-button:focus,
+.wallet-adapter-modal-middle-button:focus-visible,
+.wallet-adapter-modal-middle-button:focus {
+  outline-color: #22c55e !important;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.15) !important;
+}
