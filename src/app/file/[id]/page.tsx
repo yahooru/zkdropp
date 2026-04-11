@@ -91,15 +91,17 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     if (!wallet.isConnected || !file) return null;
     try {
       const records = await wallet.getFileRecords();
-      for (const recordStr of records) {
-        if (!recordStr) continue;
-        // FileRecord contains the file_id field — search for it in the ciphertext
-        // The encrypted record contains plaintext JSON-like data that includes the file_id
-        if (recordStr.includes(file.fileId)) {
-          // Verify it also has our file_key
-          if (recordStr.includes(fileKey.replace('u64', ''))) {
-            return recordStr;
+      for (const rec of records) {
+        if (!rec.plaintext || !rec.ciphertext) continue;
+        // Try to parse the decrypted plaintext JSON
+        try {
+          const parsed = JSON.parse(rec.plaintext);
+          // Check if this is a FileRecord with matching file_id and file_key
+          if (parsed.file_id === file.fileId && parsed.file_key?.toString() === fileKey.replace('u64', '')) {
+            return rec.ciphertext;
           }
+        } catch {
+          // Not a valid JSON, skip
         }
       }
       return null;
