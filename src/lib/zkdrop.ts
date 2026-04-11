@@ -69,8 +69,10 @@ export function saveToRegistry(entry: FileRegistryEntry): void {
   const existing = registry.findIndex(e => e.fileId === entry.fileId);
   if (existing >= 0) {
     registry[existing] = entry;
+    console.debug(`[ZKDrop] saveToRegistry: updated existing entry for fileId=${entry.fileId}`);
   } else {
     registry.push(entry);
+    console.debug(`[ZKDrop] saveToRegistry: added new entry, total=${registry.length + 1}`);
   }
   saveRegistry(registry);
 }
