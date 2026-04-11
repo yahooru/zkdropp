@@ -46,6 +46,8 @@ export interface ZKDropWalletState {
   updateName: (fileKey: string, fileId: string, newName: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
   /** Get all FileRecord records for this program from the wallet. Each has plaintext (decrypted) and ciphertext fields. */
   getFileRecords: () => Promise<{ plaintext: string; ciphertext: string }[]>;
+  /** Poll the Aleo RPC until a transaction is confirmed on-chain. Returns true if confirmed, false if timeout. */
+  waitForTxConfirmation: (txId: string, maxRetries?: number) => Promise<boolean>;
 }
 
 const ZKDropWalletContext = createContext<ZKDropWalletState>({
