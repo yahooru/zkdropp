@@ -29,7 +29,7 @@ export async function generateEncryptionKey(): Promise<CryptoKey> {
  */
 export async function exportKeyToBase64(key: CryptoKey): Promise<string> {
   const raw = await crypto.subtle.exportKey('raw', key);
-  return btoa(String.fromCharCode(...new Uint8Array(raw)));
+  const bytes = Array.from(new Uint8Array(raw)); let binary = ''; for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]); return btoa(binary);
 }
 
 /**
