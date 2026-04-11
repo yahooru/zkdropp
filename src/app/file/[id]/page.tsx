@@ -216,6 +216,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       );
 
       if (grantResult.txId) {
+        console.debug(`[ZKDrop] Access grant submitted: txId=${grantResult.txId}`);
+        // Wait for on-chain confirmation before marking as done
+        setPayStep('grant');
+        await wallet.waitForTxConfirmation(grantResult.txId, 20);
         setPayStep('done');
         setHasAccess_(true);
       } else {
