@@ -122,14 +122,17 @@ export default function PaymentsPage() {
     }
   };
 
-  // M3 fix: Poll balance after transfer until it reflects the new value
-  const pollBalance = async (token: 'credits' | 'usad', retries = 3) => {
+  // Poll balance after transfer until it reflects the new value
+  const pollBalance = async (token: 'credits' | 'usad', retries = 8) => {
     for (let i = 0; i < retries; i++) {
-      await new Promise(r => setTimeout(r, 5000)); // wait 5s between polls
+      await new Promise(r => setTimeout(r, 5000));
       const newBal = await wallet.getBalance(
         token === 'credits' ? aleoConfig.programs.credits : aleoConfig.programs.usad
       );
-      setBalance(b => ({ ...b, [token]: newBal }));
+      if (newBal !== balance[token]) {
+        setBalance(b => ({ ...b, [token]: newBal }));
+        break; // Stop polling once balance changes
+      }
     }
   };
 
