@@ -129,7 +129,8 @@ export default function UploadPage() {
         // Store encryption key in localStorage
         storeEncryptionKey(fileId, { key: keyBase64, iv: ivBase64, originalName: state.file.name });
 
-        // Register file in local registry
+        // Register file in local registry (small delay to allow block confirmation)
+        await new Promise(r => setTimeout(r, 500));
         registerFile({
           fileId,
           fileKey,
