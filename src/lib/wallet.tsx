@@ -206,6 +206,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     if (!isConnected) return { error: 'No wallet connected. Please connect your wallet first.' };
 
     try {
+      console.debug(`[ZKDrop] executeTransaction: program=${programId}, function=${functionName}, inputs=`, inputs, `, fee=${fee}`);
       const options: TransactionOptions = {
         program: programId,
         function: functionName,
@@ -213,10 +214,11 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         fee: Math.floor(fee * 1000000),
       };
       const result = await aleo.executeTransaction(options);
+      console.debug(`[ZKDrop] executeTransaction result:`, result);
       return { txId: result?.transactionId, error: '' };
     } catch (error) {
       const msg = String(error);
-      console.error('Execute error:', msg);
+      console.error('[ZKDrop] executeTransaction error:', msg);
       return { error: msg };
     }
   }, [aleo, isConnected]);
