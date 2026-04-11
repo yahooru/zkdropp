@@ -94,14 +94,18 @@ export async function uploadJSONToIPFS(metadata: object): Promise<string> {
 
 // Download file from IPFS
 export async function downloadFromIPFS(cid: string): Promise<Blob> {
-  const url = `${getGatewayUrl()}${cid}`;
-  const response = await fetch(url);
+  try {
+    const url = `${getGatewayUrl()}/${cid}`;
+    const response = await fetch(url);
 
-  if (!response.ok) {
-    throw new Error(`IPFS download failed: ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`IPFS download failed: ${response.statusText}`);
+    }
+
+    return response.blob();
+  } catch (error) {
+    throw new Error(`IPFS download failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  return response.blob();
 }
 
 // Get IPFS gateway URL for a CID
