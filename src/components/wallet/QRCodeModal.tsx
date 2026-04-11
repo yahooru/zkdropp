@@ -69,7 +69,7 @@ export function QRCodeModal({ isOpen, onClose, fileId, fileName, ipfsCid, mode }
   const handleDownload = () => {
     const a = document.createElement('a');
     a.href = qrDataUrl;
-    a.download = `zkdrop-qr-${fileId}.png`;
+    a.download = `zkdrop-qr-${fileId.replace("0x", "").replace("field", "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}.png`;
     a.click();
   };
 
