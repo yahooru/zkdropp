@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat node_modules/@provablehq/aleo-types/dist/*.d.ts)"
+      "Bash(cat node_modules/@provablehq/aleo-types/dist/*.d.ts)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
