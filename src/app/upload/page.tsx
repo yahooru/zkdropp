@@ -117,6 +117,8 @@ export default function UploadPage() {
         fileId,
         `${unixTs}u64`,
       ];
+      console.debug(`[ZKDrop] Executing upload_file with inputs:`, inputs);
+      console.debug(`[ZKDrop] program=${aleoConfig.programs.zkdrop}, function=upload_file, fileKey=${fileKey}, fileId=${fileId}`);
 
       const result = await wallet.execute(
         aleoConfig.programs.zkdrop,
