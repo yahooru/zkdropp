@@ -91,21 +91,34 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     if (!wallet.isConnected || !file) return null;
     try {
       const records = await wallet.getFileRecords();
+      if (!records || records.length === 0) {
+        console.warn('[ZKDrop] No records found in wallet for zkdrop program. Make sure the upload transaction is confirmed in your wallet.');
+        return null;
+      }
       for (const rec of records) {
-        if (!rec.plaintext || !rec.ciphertext) continue;
+        if (!rec.ciphertext) continue;
+        const plaintext = rec.plaintext || '';
         // Try to parse the decrypted plaintext JSON
-        try {
-          const parsed = JSON.parse(rec.plaintext);
-          // Check if this is a FileRecord with matching file_id and file_key
-          if (parsed.file_id === file.fileId && parsed.file_key?.toString() === fileKey.replace('u64', '')) {
-            return rec.ciphertext;
+        if (plaintext) {
+          try {
+            const parsed = JSON.parse(plaintext);
+            // Check if this is a FileRecord with matching file_id and file_key
+            if (parsed.file_id === file.fileId && String(parsed.file_key) === fileKey.replace('u64', '')) {
+              return rec.ciphertext;
+            }
+          } catch {
+            // Not a valid JSON, try raw ciphertext match
           }
-        } catch {
-          // Not a valid JSON, skip
+        }
+        // Fallback: try to find record where ciphertext contains the fileKey
+        if (rec.ciphertext && rec.ciphertext.includes(fileKey.replace('u64', ''))) {
+          return rec.ciphertext;
         }
       }
+      console.warn(`[ZKDrop] FileRecord not found for fileKey=${fileKey}, fileId=${file.fileId}. Check that the upload TX is confirmed in your wallet.`);
       return null;
-    } catch {
+    } catch (error) {
+      console.error('[ZKDrop] Error finding FileRecord:', error);
       return null;
     }
   }
