@@ -508,7 +508,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const isOwner = wallet.address === file.owner;
+  const isOwner = wallet.address?.toLowerCase() === file.owner?.toLowerCase();
   const isDeleted = Number(file.price) === 0 && file.accessCount === BigInt(0);
 
   return (
