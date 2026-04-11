@@ -42,8 +42,8 @@ export interface ZKDropWalletState {
   execute: (programId: string, functionName: string, inputs: string[], fee?: number) => Promise<{ txId?: string; error: string }>;
   transferCredits: (recipient: string, amount: bigint) => Promise<{ txId?: string; error: string }>;
   transferUSAD: (recipient: string, amount: bigint) => Promise<{ txId?: string; error: string }>;
-  deleteFile: (fileKey: string, fileId: string) => Promise<{ txId?: string; error: string }>;
-  updateName: (fileKey: string, fileId: string, newName: string) => Promise<{ txId?: string; error: string }>;
+  deleteFile: (fileKey: string, fileId: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
+  updateName: (fileKey: string, fileId: string, newName: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
   /** Get all FileRecord ciphertexts for this program from the wallet */
   getFileRecords: () => Promise<string[]>;
 }
