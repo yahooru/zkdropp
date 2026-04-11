@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useWallet, formatAddress } from '@/lib/wallet';
 import { aleoConfig, fromMicro, toMicro } from '@/lib/aleo';
 import { getFileDetails, hasAccess, sha256AccessKeyField, removeFileByKey } from '@/lib/zkdrop';
+import { waitForOnChainConfirmation } from '@/lib/zkdrop';
 import { getIPFSUrl } from '@/lib/ipfs';
 import { getEncryptionKey, decryptFile } from '@/lib/crypto';
 import type { ZKDropFile } from '@/lib/zkdrop';
