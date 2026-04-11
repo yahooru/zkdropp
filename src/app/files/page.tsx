@@ -33,9 +33,9 @@ export default function FilesPage() {
         setTotalOnChain(count);
 
         if (count > BigInt(0)) {
-          // For public browsing, derive file IDs from the local registry
+          // For public browsing, derive file keys from the local registry
           const registry = getRegistry();
-          const ids = registry.map((e) => e.fileId).slice(0, 20);
+          const ids = registry.map((e) => e.fileKey).slice(0, 20);
           const onChainFiles = await getFilesByIds(ids);
           setFiles(onChainFiles);
         } else {
