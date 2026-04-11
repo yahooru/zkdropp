@@ -449,7 +449,10 @@ export async function getAddressTransactions(
  */
 export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
   const registry = getRegistry();
-  if (!registry.length) return [];
+  if (!registry.length) {
+    console.debug('[ZKDrop] getUserFiles: registry is empty');
+    return [];
+  }
 
   const files: ZKDropFile[] = [];
 
