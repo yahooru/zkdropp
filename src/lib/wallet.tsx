@@ -270,9 +270,19 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     try {
       // aleo.requestRecords is available on the base wallet hook
       const records = await (aleo as any).requestRecords?.(aleoConfig.programs.zkdrop, true);
-      if (!records) return [];
-      return records.map((r: any) => ({ plaintext: r.plaintext || '', ciphertext: r.record || r.recordCiphertext || r.ciphertext || '' }));
-    } catch {
+      if (!records || records.length === 0) {
+        console.debug(`[ZKDrop] getFileRecords: no records found for ${aleoConfig.programs.zkdrop}`);
+        return [];
+      }
+      console.debug(`[ZKDrop] getFileRecords: found ${records.length} records`);
+      return records.map((r: any) => {
+        const plaintext = r.plaintext || r.decryptedValue || '';
+        const ciphertext = r.record || r.recordCiphertext || r.ciphertext || '';
+        console.debug(`[ZKDrop] Record: hasPlaintext=${!!plaintext}, hasCiphertext=${!!ciphertext}`);
+        return { plaintext, ciphertext };
+      });
+    } catch (error) {
+      console.error('[ZKDrop] getFileRecords error:', error);
       return [];
     }
   }, [isConnected, address, aleo]);
