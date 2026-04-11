@@ -278,12 +278,17 @@ export async function getFileName(fileKey: string): Promise<string> {
 }
 
 /**
- * Check if a file has been deleted (price = 0 on V2 contract).
+ * Check if a file has been deleted (exists on-chain but price = 0).
+ * A file that doesn't exist at all will also return false (no false positives).
  * @param fileKey - u64 mapping key
  */
 export async function isFileDeleted(fileKey: string): Promise<boolean> {
-  const price = await getFilePrice(fileKey);
-  return price === BigInt(0);
+  const [price, exists] = await Promise.all([
+    getFilePrice(fileKey),
+    fileExists(fileKey),
+  ]);
+  // File is deleted only if it exists AND price is 0
+  return exists && price === BigInt(0);
 }
 
 /**
