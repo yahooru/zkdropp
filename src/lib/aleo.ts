@@ -14,7 +14,7 @@ export const aleoConfig = {
   // Program IDs (update after deployment)
   programs: {
     // Main ZKDrop contract
-    zkdrop: process.env.NEXT_PUBLIC_ZKDROP_PROGRAM_ID || 'zkdrop_v3_0001.aleo',
+    zkdrop: process.env.NEXT_PUBLIC_ZKDROP_PROGRAM_ID || 'zkdrop_v4_0001.aleo',
 
     // ─────────────────────────────────────────────────────────
     // Buildathon Rule 4: Payment Programs
