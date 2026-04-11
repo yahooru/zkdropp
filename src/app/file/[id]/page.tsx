@@ -523,7 +523,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       <QRCodeModal
         isOpen={qrModalOpen}
         onClose={() => setQrModalOpen(false)}
-        fileId={fileKey}
+        fileKey={fileKey}
         fileName={file.name}
         ipfsCid={file.cid}
         mode={qrMode}
