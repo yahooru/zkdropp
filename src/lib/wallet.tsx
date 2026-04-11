@@ -45,9 +45,7 @@ export interface ZKDropWalletState {
   deleteFile: (fileKey: string, fileId: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
   updateName: (fileKey: string, fileId: string, newName: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
   /** Get all FileRecord ciphertexts for this program from the wallet */
-  getFileRecords: () => Promise<string[]>;
-  /** Decrypt an Aleo record ciphertext using the wallet's view key */
-  decryptRecord: (ciphertext: string) => Promise<string>;
+  getFileRecords: () => Promise<{ plaintext: string; ciphertext: string }[]>;
 }
 
 const ZKDropWalletContext = createContext<ZKDropWalletState>({
