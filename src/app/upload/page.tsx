@@ -9,7 +9,6 @@ import { useWallet } from '@/lib/wallet';
 import { aleoConfig, toMicro } from '@/lib/aleo';
 import { registerFile } from '@/lib/zkdrop';
 // FileRecord ciphertext will be retrieved from wallet via transaction history after upload.
-import { storeFileRecordCipher } from '@/lib/zkdrop';
 import { encryptFileForUpload, storeEncryptionKey } from '@/lib/crypto';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
