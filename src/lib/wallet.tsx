@@ -409,6 +409,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     getFileRecords,
     deleteFile,
     updateName,
+    waitForTxConfirmation,
   };
 
   return (
