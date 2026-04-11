@@ -9,7 +9,7 @@
 //   - Records are never consumed — owner keeps their FileRecord after use.
 //   - Payment is SEPARATE from access (credits.aleo/transfer_public).
 //   - Read/view operations done via Aleo RPC API mapping queries.
-program zkdrop_v3_0001.aleo {
+program zkdrop_v4_0001.aleo {
 
     // Records (Private State)
     // owner: address MUST be first field in all Leo records.
