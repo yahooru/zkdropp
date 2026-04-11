@@ -3,7 +3,8 @@
 const PINATA_API_URL = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
 
 function getGatewayUrl(): string {
-  return process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs/';
+  const base = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs/';
+  return base.replace(/\/$/, '');
 }
 
 function getPinataJwt(): string | null {
