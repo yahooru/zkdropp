@@ -95,6 +95,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         console.warn('[ZKDrop] No records found in wallet for zkdrop program. Make sure the upload transaction is confirmed in your wallet.');
         return null;
       }
+      console.debug(`[ZKDrop] Found ${records.length} records, searching for fileKey=${fileKey}`);
       for (const rec of records) {
         if (!rec.ciphertext) continue;
         const plaintext = rec.plaintext || '';
@@ -104,6 +105,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
             const parsed = JSON.parse(plaintext);
             // Check if this is a FileRecord with matching file_id and file_key
             if (parsed.file_id === file.fileId && String(parsed.file_key) === fileKey.replace('u64', '')) {
+              console.debug('[ZKDrop] Found matching FileRecord via plaintext JSON match');
               return rec.ciphertext;
             }
           } catch {
@@ -112,6 +114,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         }
         // Fallback: try to find record where ciphertext contains the fileKey
         if (rec.ciphertext && rec.ciphertext.includes(fileKey.replace('u64', ''))) {
+          console.debug('[ZKDrop] Found matching FileRecord via ciphertext match');
           return rec.ciphertext;
         }
       }
