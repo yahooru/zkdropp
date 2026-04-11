@@ -358,7 +358,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       // Find our FileRecord from the wallet
       const fileRecordCipher = await findOwnerFileRecord();
       if (!fileRecordCipher) {
-        setPriceMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet. Make sure you have the upload transaction confirmed.' });
+        setPriceMsg({ type: 'error', text: 'FileRecord not found in wallet. Ensure your upload transaction is confirmed and the record is in your wallet.' });
         setPriceLoading(false);
         return;
       }
