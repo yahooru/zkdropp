@@ -46,6 +46,8 @@ export interface ZKDropWalletState {
   updateName: (fileKey: string, fileId: string, newName: string, fileRecordCiphertext: string) => Promise<{ txId?: string; error: string }>;
   /** Get all FileRecord ciphertexts for this program from the wallet */
   getFileRecords: () => Promise<string[]>;
+  /** Decrypt an Aleo record ciphertext using the wallet's view key */
+  decryptRecord: (ciphertext: string) => Promise<string>;
 }
 
 const ZKDropWalletContext = createContext<ZKDropWalletState>({
@@ -65,6 +67,7 @@ const ZKDropWalletContext = createContext<ZKDropWalletState>({
   deleteFile: async () => ({ error: 'Not connected' }),
   updateName: async () => ({ error: 'Not connected' }),
   getFileRecords: async () => [],
+  decryptRecord: async () => { throw new Error('Wallet not connected'); },
 });
 
 export function useWallet(): ZKDropWalletState {
