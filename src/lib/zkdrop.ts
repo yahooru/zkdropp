@@ -371,6 +371,29 @@ export async function getTransaction(txId: string): Promise<{
 }
 
 /**
+ * Wait for a file to appear on-chain by polling fileExists.
+ * Retries every 3s for up to maxRetries (default: 20 = ~60s).
+ * Returns true if confirmed on-chain, false if timeout.
+ */
+export async function waitForOnChainConfirmation(
+  fileKey: string,
+  maxRetries: number = 20
+): Promise<boolean> {
+  console.debug(`[ZKDrop] Waiting for on-chain confirmation for fileKey=${fileKey}`);
+  for (let i = 0; i < maxRetries; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const exists = await fileExists(fileKey);
+    console.debug(`[ZKDrop] Attempt ${i + 1}/${maxRetries}: fileKey=${fileKey}, exists=${exists}`);
+    if (exists) {
+      console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
+      return true;
+    }
+  }
+  console.warn(`[ZKDrop] On-chain confirmation timed out for fileKey=${fileKey} after ${maxRetries} attempts`);
+  return false;
+}
+
+/**
  * Get recent transactions for an address.
  * Bug #6 fix: getTransactions(address) doesn't exist — use block-by-block queries instead.
  */
