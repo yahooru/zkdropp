@@ -570,6 +570,7 @@ export function registerFile(params: {
 }): void {
   const fileId = params.fileId ?? '';
   const fileKey = params.fileKey ?? '';
+  console.debug(`[ZKDrop] registerFile: fileId=${fileId}, fileKey=${fileKey}, cid=${params.cid}, name=${params.name}`);
   saveToRegistry({
     fileId,
     fileKey,
