@@ -300,9 +300,8 @@ export default function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Delete File</h3>
                 <p className="mt-2 text-sm text-gray-600">
-                  Are you sure you want to delete <strong>{fileToDelete.name}</strong>? This will
-                  remove it from your local registry. The file remains on IPFS but will be
-                  unlinked from this app.
+                  This removes it from your local registry only. To fully remove from the
+                  blockchain, use the &quot;Delete File&quot; button on the file detail page.
                 </p>
                 <div className="mt-6 flex gap-3">
                   <Button
