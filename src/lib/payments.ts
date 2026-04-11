@@ -59,7 +59,8 @@ export async function callViewFunction(
   inputs: string[]
 ): Promise<{ outputs?: unknown; error?: string }> {
   try {
-    const url = `${aleoConfig.rpcUrl}/testnet/program/${programId}/${functionName}`;
+    const baseUrl = aleoConfig.rpcUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/testnet/program/${programId}/${functionName}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
