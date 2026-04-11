@@ -488,8 +488,9 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
 
 /**
  * Get multiple file details at once (for browse page).
+ * @param fileKeys - array of u64 literal strings (NOT field literals)
  */
-export async function getFilesByIds(fileIds: string[]): Promise<ZKDropFile[]> {
+export async function getFilesByIds(fileKeys: string[]): Promise<ZKDropFile[]> {
   const results = await Promise.all(
     fileIds.map(id => getFileDetails(id))
   );
