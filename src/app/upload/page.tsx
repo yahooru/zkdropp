@@ -7,7 +7,7 @@ import { Upload, FileText, X, CheckCircle2, AlertCircle, Lock, Shield, Coins, Ke
 import { useDropzone } from 'react-dropzone';
 import { useWallet } from '@/lib/wallet';
 import { aleoConfig, toMicro } from '@/lib/aleo';
-import { registerFile } from '@/lib/zkdrop';
+import { registerFile, waitForOnChainConfirmation } from '@/lib/zkdrop';
 // FileRecord ciphertext will be retrieved from wallet via transaction history after upload.
 import { encryptFileForUpload, storeEncryptionKey } from '@/lib/crypto';
 import { Button } from '@/components/ui/Button';
