@@ -46,7 +46,7 @@ export async function importKeyFromBase64(base64: string): Promise<CryptoKey> {
     bytes,
     { name: ALGORITHM, length: KEY_LENGTH },
     true,
-    ['decrypt']
+    ['encrypt', 'decrypt']
   );
 }
 
