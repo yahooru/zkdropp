@@ -277,9 +277,6 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, address, aleo]);
 
-      throw new Error('Failed to decrypt record');
-    }
-  }, [isConnected, aleo]);
 
   // delete_file: requires FileRecord as last parameter.
   // The caller (page component) must find the FileRecord and pass it as raw ciphertext string.
