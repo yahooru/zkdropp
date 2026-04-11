@@ -132,8 +132,7 @@ export default function UploadPage() {
         // Store encryption key in localStorage
         storeEncryptionKey(fileId, { key: keyBase64, iv: ivBase64, originalName: state.file.name });
 
-        // Register file in local registry (small delay to allow block confirmation)
-        await new Promise(r => setTimeout(r, 500));
+        // Register file in local registry immediately (so it shows as pending)
         console.debug(`[ZKDrop] Upload success: registering fileId=${fileId}, fileKey=${fileKey}, cid=${cid}`);
         registerFile({
           fileId,
@@ -146,12 +145,17 @@ export default function UploadPage() {
           unixTs,
         });
 
-        setState((s) => ({
-          ...s,
-          step: 'success',
-          txId: result.txId || null,
-          fileId,
-        }));
+        // Wait for on-chain confirmation before showing success
+        setState((s) => ({ ...s, step: 'blockchain', txId: result.txId || null }));
+        const confirmed = await waitForOnChainConfirmation(fileKey, 20);
+        if (confirmed) {
+          console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
+          setState((s) => ({ ...s, step: 'success', fileId }));
+        } else {
+          // Show success anyway but warn user
+          console.warn(`[ZKDrop] File upload may still be pending on-chain. TX: ${result.txId}`);
+          setState((s) => ({ ...s, step: 'success', fileId }));
+        }
       } else if (result.error && result.error.includes('user rejected')) {
         throw new Error('Transaction cancelled by user.');
       } else if (result.error) {
