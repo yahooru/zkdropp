@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 
 // Demo/fallback files shown when no on-chain data is available
-const FALLBACK_FILES: ZKDropFile[] = [];
 
 export default function FilesPage() {
   const wallet = useWallet();

@@ -154,10 +154,6 @@ export async function sha256AccessKeyField(fileId: string, address: string): Pro
  * Converts a CID string to the file_id hex (without 0x prefix).
  * Use sha256ToField() for the actual Aleo field literal.
  */
-export function cidToField(cid: string): string {
-  // Legacy: this was the old approach. No longer used by upload flow.
-  // Kept so existing code doesn't break.
-  return cid;
 }
 
 /**
