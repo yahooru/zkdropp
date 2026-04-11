@@ -496,10 +496,13 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
  * @param fileKeys - array of u64 literal strings (NOT field literals)
  */
 export async function getFilesByIds(fileKeys: string[]): Promise<ZKDropFile[]> {
+  if (!fileKeys.length) return [];
   const results = await Promise.all(
     fileKeys.map(key => getFileDetails(key))
   );
-  return results.filter((f): f is ZKDropFile => f !== null);
+  const filtered = results.filter((f): f is ZKDropFile => f !== null);
+  console.debug(`[ZKDrop] getFilesByIds: queried=${fileKeys.length}, found=${filtered.length}`);
+  return filtered;
 }
 
 /**
