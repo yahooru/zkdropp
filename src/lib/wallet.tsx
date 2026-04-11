@@ -277,20 +277,6 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, address, aleo]);
 
-  // Decrypt an Aleo record ciphertext using the wallet's view key.
-  const decryptRecord = useCallback(async (ciphertext: string): Promise<string> => {
-    if (!isConnected) throw new Error('Wallet not connected');
-    try {
-      // Try the wallet adapter's built-in decrypt method
-      if ((aleo as any).decrypt) {
-        return await (aleo as any).decrypt(ciphertext);
-      }
-      if ((aleo as any).wallet?.adapter?.decrypt) {
-        return await (aleo as any).wallet.adapter.decrypt(ciphertext);
-      }
-      // Fallback: return as-is (record matching will fail)
-      return ciphertext;
-    } catch {
       throw new Error('Failed to decrypt record');
     }
   }, [isConnected, aleo]);
@@ -376,7 +362,6 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     transferCredits,
     transferUSAD,
     getFileRecords,
-    decryptRecord,
     deleteFile,
     updateName,
   };
