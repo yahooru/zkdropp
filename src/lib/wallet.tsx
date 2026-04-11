@@ -65,7 +65,6 @@ const ZKDropWalletContext = createContext<ZKDropWalletState>({
   deleteFile: async () => ({ error: 'Not connected' }),
   updateName: async () => ({ error: 'Not connected' }),
   getFileRecords: async () => [],
-  decryptRecord: async () => { throw new Error('Wallet not connected'); },
 });
 
 export function useWallet(): ZKDropWalletState {
