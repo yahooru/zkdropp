@@ -316,7 +316,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       // Find our FileRecord from the wallet
       const fileRecordCipher = await findOwnerFileRecord();
       if (!fileRecordCipher) {
-        setRevokeMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet. Make sure you have the upload transaction confirmed in your wallet.' });
+        setRevokeMsg({ type: 'error', text: 'FileRecord not found in wallet. Ensure your upload transaction is confirmed and the record is in your wallet.' });
         setRevokeLoading(false);
         return;
       }
