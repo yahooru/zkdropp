@@ -23,8 +23,8 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
   const [loading, setLoading] = useState(true);
 
   const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/file/${fileId}`
-    : `https://zkdrop.app/file/${fileId}`;
+    ? `${window.location.origin}/file/${fileKey}`
+    : `https://zkdrop.app/file/${fileKey}`;
 
   const contentUrl = mode === 'ipfs' && ipfsCid
     ? `https://gateway.pinata.cloud/ipfs/${ipfsCid}`
