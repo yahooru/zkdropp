@@ -131,6 +131,7 @@ export default function UploadPage() {
 
         // Register file in local registry (small delay to allow block confirmation)
         await new Promise(r => setTimeout(r, 500));
+        console.debug(`[ZKDrop] Upload success: registering fileId=${fileId}, fileKey=${fileKey}, cid=${cid}`);
         registerFile({
           fileId,
           fileKey,
