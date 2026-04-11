@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cat node_modules/@provablehq/aleo-types/dist/*.d.ts)",
       "Bash(npx tsc:*)",
-      "Bash(grep -r \"TransactionOptions\\\\|fee.*micro\\\\|feeCredits\\\\|Fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)"
+      "Bash(grep -r \"TransactionOptions\\\\|fee.*micro\\\\|feeCredits\\\\|Fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)",
+      "Bash(grep -r \"fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)"
     ]
   }
 }
