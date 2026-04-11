@@ -516,7 +516,10 @@ export async function getFileDetails(fileKey: string): Promise<ZKDropFile | null
     getFileName(fileKey),
   ]);
 
-  if (!owner) return null;
+  if (!owner) {
+    console.debug(`[ZKDrop] getFileDetails: no owner found for fileKey=${fileKey}`);
+    return null;
+  }
 
   const registry = getRegistry();
   const local = registry.find(e => e.fileKey === fileKey);
