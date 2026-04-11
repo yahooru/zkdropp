@@ -174,6 +174,9 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         if (!transferResult.txId) {
           throw new Error(transferResult.error || 'Credit transfer failed');
         }
+        console.debug(`[ZKDrop] Payment submitted: txId=${transferResult.txId}`);
+        // Wait for payment to confirm
+        await wallet.waitForTxConfirmation(transferResult.txId, 20);
       }
 
       // Step 2: Record access grant on-chain
