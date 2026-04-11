@@ -546,7 +546,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                       <Badge variant="default">Deleted</Badge>
                     )}
                     {!isDeleted && (
-                      <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'>
+                      <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'}>
                         {Number(fromMicro(file.price)) === 0 ? 'Free' : `${fromMicro(file.price)} Credits`}
                       </Badge>
                     )}
