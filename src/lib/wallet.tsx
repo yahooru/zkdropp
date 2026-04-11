@@ -223,6 +223,39 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     }
   }, [aleo, isConnected]);
 
+  // Wait for a transaction to be confirmed on-chain
+  const waitForTxConfirmation = useCallback(async (
+    txId: string,
+    maxRetries: number = 20
+  ): Promise<boolean> => {
+    if (!txId || txId.startsWith('shield_')) {
+      // Wallet-local ID — cannot verify on-chain, assume pending
+      console.warn(`[ZKDrop] Cannot verify shield_ prefixed ID on-chain: ${txId}`);
+      return false;
+    }
+    try {
+      const { AleoNetworkClient } = await import('@provablehq/sdk');
+      const client = new AleoNetworkClient(aleoConfig.rpcUrl);
+      for (let i = 0; i < maxRetries; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const tx = await client.getTransaction(txId) as any;
+          if (tx && tx.status === 'confirmed') {
+            console.debug(`[ZKDrop] Transaction confirmed on-chain: ${txId}`);
+            return true;
+          }
+        } catch {
+          // Not found yet, keep polling
+        }
+        console.debug(`[ZKDrop] Waiting for tx confirmation: ${txId} (${i + 1}/${maxRetries})`);
+      }
+      return false;
+    } catch (error) {
+      console.error('[ZKDrop] waitForTxConfirmation error:', error);
+      return false;
+    }
+  }, []);
+
   // Transfer Aleo Credits
   // NOTE (RH1): Uses transfer_public — amount and recipient are visible on-chain.
   // For true privacy, transfer_private would be needed (requires private record inputs).
