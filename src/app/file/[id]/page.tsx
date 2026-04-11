@@ -1,13 +1,16 @@
 'use client';
 
 import { use } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Download, Lock, Eye, CreditCard, Copy, CheckCircle2, ArrowLeft, QrCode, ExternalLink, AlertCircle, Trash2, Edit3, UserPlus } from 'lucide-react';
+import {
+  FileText, Download, Lock, Eye, CreditCard, Copy, CheckCircle2,
+  ArrowLeft, QrCode, ExternalLink, AlertCircle, Trash2, Edit3, UserPlus, RefreshCw,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useWallet, formatAddress } from '@/lib/wallet';
 import { aleoConfig, fromMicro, toMicro } from '@/lib/aleo';
-import { getFileDetails, hasAccess, sha256AccessKeyField } from '@/lib/zkdrop';
+import { getFileDetails, hasAccess, sha256AccessKeyField, removeFileByKey } from '@/lib/zkdrop';
 import { getIPFSUrl } from '@/lib/ipfs';
 import { getEncryptionKey, decryptFile } from '@/lib/crypto';
 import type { ZKDropFile } from '@/lib/zkdrop';
@@ -19,7 +22,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { copyToClipboard } from '@/lib/utils';
 
 export default function FileDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id: fileKey } = use(params);
   const wallet = useWallet();
   const [loading, setLoading] = useState(true);
   const [file, setFile] = useState<ZKDropFile | null>(null);
@@ -31,48 +34,82 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   const [downloading, setDownloading] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrMode, setQrMode] = useState<'link' | 'ipfs'>('link');
+  const [decryptError, setDecryptError] = useState(false);
+
   // Owner action state
   const [grantAddress, setGrantAddress] = useState('');
   const [grantLoading, setGrantLoading] = useState(false);
   const [grantMsg, setGrantMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const [revokeAddress, setRevokeAddress] = useState('');
   const [revokeLoading, setRevokeLoading] = useState(false);
   const [revokeMsg, setRevokeMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const [newPrice, setNewPrice] = useState('');
   const [priceLoading, setPriceLoading] = useState(false);
   const [priceMsg, setPriceMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [decryptError, setDecryptError] = useState(false);
+
+  const [newName, setNewName] = useState('');
+  const [nameLoading, setNameLoading] = useState(false);
+  const [nameMsg, setNameMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const loadFile = useCallback(async () => {
+    setLoading(true);
+    try {
+      const fileData = await getFileDetails(fileKey);
+      setFile(fileData);
+
+      if (fileData) {
+        // Check access if wallet is connected
+        if (wallet.isConnected && wallet.address) {
+          const access = await hasAccess(fileData.fileId, wallet.address);
+          setHasAccess_(access);
+        }
+        // Free files are accessible to everyone
+        if (Number(fromMicro(fileData.price)) === 0) {
+          setHasAccess_(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load file:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [fileKey, wallet.address, wallet.isConnected]);
 
   useEffect(() => {
-    const loadFile = async () => {
-      setLoading(true);
-      try {
-        const fileData = await getFileDetails(id);
-        setFile(fileData);
+    loadFile();
+  }, [loadFile]);
 
-        if (fileData) {
-          // Check access if wallet is connected
-          if (wallet.isConnected && wallet.address) {
-            const access = await hasAccess(fileData.fileId, wallet.address);
-            setHasAccess_(access);
-          }
-          // Free files are accessible
-          if (fileData && Number(fromMicro(fileData.price)) === 0) {
-            setHasAccess_(true);
+  // ─────────────────────────────────────────────────────────────────
+  // Find FileRecord ciphertext from wallet for owner operations
+  // ─────────────────────────────────────────────────────────────────
+  async function findOwnerFileRecord(): Promise<string | null> {
+    if (!wallet.isConnected || !file) return null;
+    try {
+      const records = await wallet.getFileRecords();
+      for (const recordStr of records) {
+        if (!recordStr) continue;
+        // FileRecord contains the file_id field — search for it in the ciphertext
+        // The encrypted record contains plaintext JSON-like data that includes the file_id
+        if (recordStr.includes(file.fileId)) {
+          // Verify it also has our file_key
+          if (recordStr.includes(fileKey.replace('u64', ''))) {
+            return recordStr;
           }
         }
-      } catch (error) {
-        console.error('Failed to load file:', error);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadFile();
-  }, [id, wallet.address, wallet.isConnected]);
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   const handleCopyLink = async () => {
-    await copyToClipboard(`${typeof window !== 'undefined' ? window.location.origin : ''}/file/${id}`);
+    await copyToClipboard(`${typeof window !== 'undefined' ? window.location.origin : ''}/file/${fileKey}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -82,116 +119,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     setQrModalOpen(true);
   };
 
-  // Owner: grant access to a specific address
-  const handleGrantAccess = async () => {
-    if (!wallet.isConnected || !file || !grantAddress.trim()) return;
-    if (!/^aleo1[a-z0-9]{50,}$/i.test(grantAddress.trim())) {
-      setGrantMsg({ type: 'error', text: 'Invalid Aleo address format.' });
-      return;
-    }
-    setGrantLoading(true);
-    setGrantMsg(null);
-    try {
-      const recipient = grantAddress.trim();
-      // fileKey = URL param (u64 literal), fileId = field literal, accessKey = u64 literal
-      const fileId = file.fileId;
-      const accessKeyField = await sha256AccessKeyField(fileId, recipient);
-      const encoder = new TextEncoder();
-      const data = encoder.encode(fileId + recipient);
-      const buf = await crypto.subtle.digest('SHA-256', data);
-      const view = new DataView(buf);
-      const accessKey = `${view.getBigUint64(0).toString()}u64`;
-
-      const result = await wallet.execute(
-        aleoConfig.programs.zkdrop,
-        'request_access',
-        [id, fileId, accessKey],
-        2.0
-      );
-      if (result.txId) {
-        setGrantMsg({ type: 'success', text: `Access granted to ${formatAddress(recipient, 6)}! TX: ${result.txId.slice(0, 16)}...` });
-        setGrantAddress('');
-      } else {
-        setGrantMsg({ type: 'error', text: result.error || 'Grant failed.' });
-      }
-    } catch (e) {
-      setGrantMsg({ type: 'error', text: String(e) });
-    } finally {
-      setGrantLoading(false);
-    }
-  };
-
-  // Owner: revoke access for a specific address
-  // Note: revoke_access requires the owner's FileRecord from their wallet.
-  const handleRevokeAccess = async () => {
-    if (!wallet.isConnected || !file || !revokeAddress.trim()) return;
-    if (!/^aleo1[a-z0-9]{50,}$/i.test(revokeAddress.trim())) {
-      setRevokeMsg({ type: 'error', text: 'Invalid Aleo address format.' });
-      return;
-    }
-    setRevokeLoading(true);
-    setRevokeMsg(null);
-    try {
-      const user = revokeAddress.trim();
-      const fileId = file.fileId;
-      const encoder = new TextEncoder();
-      const data = encoder.encode(fileId + user);
-      const buf = await crypto.subtle.digest('SHA-256', data);
-      const view = new DataView(buf);
-      const accessKey = `${view.getBigUint64(0).toString()}u64`;
-
-      const result = await wallet.execute(
-        aleoConfig.programs.zkdrop,
-        'revoke_access',
-        [id, fileId, accessKey],
-        2.0
-      );
-      if (result.txId) {
-        setRevokeMsg({ type: 'success', text: `Access revoked for ${formatAddress(user, 6)}. TX: ${result.txId.slice(0, 16)}...` });
-        setRevokeAddress('');
-      } else {
-        setRevokeMsg({ type: 'error', text: result.error || 'Revoke failed. Make sure your FileRecord is in your wallet.' });
-      }
-    } catch (e) {
-      setRevokeMsg({ type: 'error', text: String(e) });
-    } finally {
-      setRevokeLoading(false);
-    }
-  };
-
-  // Owner: update file price
-  // Note: update_price requires the owner's FileRecord from their wallet.
-  const handleUpdatePrice = async () => {
-    if (!wallet.isConnected || !file) return;
-    const priceNum = parseFloat(newPrice);
-    if (isNaN(priceNum) || priceNum < 0) {
-      setPriceMsg({ type: 'error', text: 'Invalid price.' });
-      return;
-    }
-    setPriceLoading(true);
-    setPriceMsg(null);
-    try {
-      const result = await wallet.execute(
-        aleoConfig.programs.zkdrop,
-        'update_price',
-        [id, file.fileId, `${toMicro(priceNum).toString()}u64`],
-        2.0
-      );
-      if (result.txId) {
-        setPriceMsg({ type: 'success', text: `Price updated to ${priceNum} Credits!` });
-        setNewPrice('');
-        const updated = await getFileDetails(id);
-        if (updated) setFile(updated);
-      } else {
-        setPriceMsg({ type: 'error', text: result.error || 'Update failed. Make sure your FileRecord is in your wallet.' });
-      }
-    } catch (e) {
-      setPriceMsg({ type: 'error', text: String(e) });
-    } finally {
-      setPriceLoading(false);
-    }
-  };
-
+  // ─────────────────────────────────────────────────────────────────
+  // Request access to a file
+  // V2 contract: request_access(file_key, file_id, ipfs_hash, file_name, access_key, unix_ts)
+  // ─────────────────────────────────────────────────────────────────
   const handleRequestAccess = async () => {
     if (!wallet.isConnected || !wallet.address || !file) {
       if (!wallet.isConnected) wallet.connect();
@@ -205,7 +136,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     try {
       const price = Number(fromMicro(file.price));
 
-      // Step 1: Pay credits if the file has a price (H2 fix: 2 args, not 3)
+      // Step 1: Pay credits if the file has a price
       if (price > 0) {
         setPayStep('transfer');
         const amount = toMicro(price).toString();
@@ -221,18 +152,41 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       }
 
       // Step 2: Record access grant on-chain
-      // New 3-param format: [fileKey(u64), fileId(field), accessKey(u64)]
       setPayStep('grant');
+
+      // Compute access_key = sha256(file_id + address)[0..8] as u64
       const encoder = new TextEncoder();
       const accessKeyData = encoder.encode(file.fileId + (wallet.address || ''));
       const accessKeyBuf = await crypto.subtle.digest('SHA-256', accessKeyData);
-      const view = new DataView(accessKeyBuf);
-      const accessKey = `${view.getBigUint64(0).toString()}u64`;
+      const accessView = new DataView(accessKeyBuf);
+      const accessKey = `${accessView.getBigUint64(0).toString()}u64`;
 
+      // Build file_name as [u8; 64]
+      const fileNameBytes = [];
+      for (let i = 0; i < 64; i++) {
+        fileNameBytes.push(i < file.name.length ? file.name.charCodeAt(i) : 0);
+      }
+
+      // Build ipfs_hash as [u8; 64] (from CID, padded)
+      const ipfsBytes = [];
+      for (let i = 0; i < 64; i++) {
+        ipfsBytes.push(i < file.cid.length ? file.cid.charCodeAt(i) : 0);
+      }
+
+      const unixTs = Math.floor(Date.now() / 1000);
+
+      // V2 request_access: (file_key, file_id, ipfs_hash, file_name, access_key, unix_ts)
       const grantResult = await wallet.execute(
         aleoConfig.programs.zkdrop,
         'request_access',
-        [id, file.fileId, accessKey],
+        [
+          fileKey,                                     // file_key (u64)
+          file.fileId,                                 // file_id (field)
+          `[${ipfsBytes.map(b => `${b}u8`).join(', ')}]`, // ipfs_hash [u8; 64]
+          `[${fileNameBytes.map(b => `${b}u8`).join(', ')}]`, // file_name [u8; 64]
+          accessKey,                                   // access_key (u64)
+          `${unixTs}u64`,                              // unix_ts
+        ],
         2.0
       );
 
@@ -251,6 +205,245 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────
+  // Owner: grant access to a specific address
+  // ─────────────────────────────────────────────────────────────────
+  const handleGrantAccess = async () => {
+    if (!wallet.isConnected || !file || !grantAddress.trim()) return;
+    if (!/^aleo1[a-z0-9]{50,}$/i.test(grantAddress.trim())) {
+      setGrantMsg({ type: 'error', text: 'Invalid Aleo address format.' });
+      return;
+    }
+    setGrantLoading(true);
+    setGrantMsg(null);
+    try {
+      const recipient = grantAddress.trim();
+
+      // Compute access_key for the recipient
+      const accessKeyField = await sha256AccessKeyField(file.fileId, recipient);
+      const encoder = new TextEncoder();
+      const data = encoder.encode(file.fileId + recipient);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      const view = new DataView(buf);
+      const accessKey = `${view.getBigUint64(0).toString()}u64`;
+
+      // Build file_name as [u8; 64]
+      const fileNameBytes = [];
+      for (let i = 0; i < 64; i++) {
+        fileNameBytes.push(i < file.name.length ? file.name.charCodeAt(i) : 0);
+      }
+
+      // Build ipfs_hash as [u8; 64]
+      const ipfsBytes = [];
+      for (let i = 0; i < 64; i++) {
+        ipfsBytes.push(i < file.cid.length ? file.cid.charCodeAt(i) : 0);
+      }
+
+      const unixTs = Math.floor(Date.now() / 1000);
+
+      // V2: request_access(file_key, file_id, ipfs_hash, file_name, access_key, unix_ts)
+      const result = await wallet.execute(
+        aleoConfig.programs.zkdrop,
+        'request_access',
+        [
+          fileKey,
+          file.fileId,
+          `[${ipfsBytes.map(b => `${b}u8`).join(', ')}]`,
+          `[${fileNameBytes.map(b => `${b}u8`).join(', ')}]`,
+          accessKey,
+          `${unixTs}u64`,
+        ],
+        2.0
+      );
+      if (result.txId) {
+        setGrantMsg({ type: 'success', text: `Access granted to ${formatAddress(recipient, 6)}! TX: ${result.txId.slice(0, 16)}...` });
+        setGrantAddress('');
+      } else {
+        setGrantMsg({ type: 'error', text: result.error || 'Grant failed.' });
+      }
+    } catch (e) {
+      setGrantMsg({ type: 'error', text: String(e) });
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // Owner: revoke access for a specific address
+  // V2: revoke_access(file_key, file_id, access_key, file_record)
+  // ─────────────────────────────────────────────────────────────────
+  const handleRevokeAccess = async () => {
+    if (!wallet.isConnected || !file || !revokeAddress.trim()) return;
+    if (!/^aleo1[a-z0-9]{50,}$/i.test(revokeAddress.trim())) {
+      setRevokeMsg({ type: 'error', text: 'Invalid Aleo address format.' });
+      return;
+    }
+    setRevokeLoading(true);
+    setRevokeMsg(null);
+    try {
+      const user = revokeAddress.trim();
+
+      // Compute access_key for the user
+      const accessKeyField = await sha256AccessKeyField(file.fileId, user);
+      const encoder = new TextEncoder();
+      const data = encoder.encode(file.fileId + user);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      const view = new DataView(buf);
+      const accessKey = `${view.getBigUint64(0).toString()}u64`;
+
+      // Find our FileRecord from the wallet
+      const fileRecordCipher = await findOwnerFileRecord();
+      if (!fileRecordCipher) {
+        setRevokeMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet. Make sure you have the upload transaction confirmed in your wallet.' });
+        setRevokeLoading(false);
+        return;
+      }
+
+      // V2 revoke_access: (file_key, file_id, access_key, file_record)
+      const result = await wallet.execute(
+        aleoConfig.programs.zkdrop,
+        'revoke_access',
+        [fileKey, file.fileId, accessKey, fileRecordCipher],
+        2.0
+      );
+      if (result.txId) {
+        setRevokeMsg({ type: 'success', text: `Access revoked for ${formatAddress(user, 6)}. TX: ${result.txId.slice(0, 16)}...` });
+        setRevokeAddress('');
+      } else {
+        setRevokeMsg({ type: 'error', text: result.error || 'Revoke failed. Make sure your FileRecord is in your wallet.' });
+      }
+    } catch (e) {
+      setRevokeMsg({ type: 'error', text: String(e) });
+    } finally {
+      setRevokeLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // Owner: update file price
+  // V2: update_price(file_key, file_id, new_price, file_record)
+  // ─────────────────────────────────────────────────────────────────
+  const handleUpdatePrice = async () => {
+    if (!wallet.isConnected || !file) return;
+    const priceNum = parseFloat(newPrice);
+    if (isNaN(priceNum) || priceNum < 0) {
+      setPriceMsg({ type: 'error', text: 'Invalid price.' });
+      return;
+    }
+    setPriceLoading(true);
+    setPriceMsg(null);
+    try {
+      // Find our FileRecord from the wallet
+      const fileRecordCipher = await findOwnerFileRecord();
+      if (!fileRecordCipher) {
+        setPriceMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet. Make sure you have the upload transaction confirmed.' });
+        setPriceLoading(false);
+        return;
+      }
+
+      // V2 update_price: (file_key, file_id, new_price, file_record)
+      const result = await wallet.execute(
+        aleoConfig.programs.zkdrop,
+        'update_price',
+        [fileKey, file.fileId, `${toMicro(priceNum).toString()}u64`, fileRecordCipher],
+        2.0
+      );
+      if (result.txId) {
+        setPriceMsg({ type: 'success', text: `Price updated to ${priceNum} Credits!` });
+        setNewPrice('');
+        await loadFile(); // Refresh data
+      } else {
+        setPriceMsg({ type: 'error', text: result.error || 'Update failed. Make sure your FileRecord is in your wallet.' });
+      }
+    } catch (e) {
+      setPriceMsg({ type: 'error', text: String(e) });
+    } finally {
+      setPriceLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // Owner: update file name
+  // V2: update_name(file_key, file_id, new_name, file_record)
+  // ─────────────────────────────────────────────────────────────────
+  const handleUpdateName = async () => {
+    if (!wallet.isConnected || !file || !newName.trim()) return;
+    setNameLoading(true);
+    setNameMsg(null);
+    try {
+      const fileRecordCipher = await findOwnerFileRecord();
+      if (!fileRecordCipher) {
+        setNameMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet. Make sure you have the upload transaction confirmed.' });
+        setNameLoading(false);
+        return;
+      }
+
+      // Build name as [u8; 64]
+      const nameBytes = [];
+      for (let i = 0; i < 64; i++) {
+        nameBytes.push(i < newName.length ? newName.charCodeAt(i) : 0);
+      }
+
+      // V2 update_name: (file_key, file_id, new_name, file_record)
+      const result = await wallet.execute(
+        aleoConfig.programs.zkdrop,
+        'update_name',
+        [fileKey, file.fileId, `[${nameBytes.map(b => `${b}u8`).join(', ')}]`, fileRecordCipher],
+        2.0
+      );
+      if (result.txId) {
+        setNameMsg({ type: 'success', text: `Name updated to "${newName}"!` });
+        setNewName('');
+        await loadFile();
+      } else {
+        setNameMsg({ type: 'error', text: result.error || 'Update failed.' });
+      }
+    } catch (e) {
+      setNameMsg({ type: 'error', text: String(e) });
+    } finally {
+      setNameLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // Owner: delete file
+  // V2: delete_file(file_key, file_id, file_record)
+  // ─────────────────────────────────────────────────────────────────
+  const handleDeleteFile = async () => {
+    if (!wallet.isConnected || !file) return;
+    setDeleteLoading(true);
+    setDeleteMsg(null);
+    try {
+      const fileRecordCipher = await findOwnerFileRecord();
+      if (!fileRecordCipher) {
+        setDeleteMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet.' });
+        setDeleteLoading(false);
+        return;
+      }
+
+      // V2 delete_file: (file_key, file_id, file_record)
+      const result = await wallet.execute(
+        aleoConfig.programs.zkdrop,
+        'delete_file',
+        [fileKey, file.fileId, fileRecordCipher],
+        2.0
+      );
+      if (result.txId) {
+        setDeleteMsg({ type: 'success', text: `File deleted! TX: ${result.txId.slice(0, 16)}...` });
+        // Remove from local registry
+        removeFileByKey(fileKey);
+        // Refresh
+        setTimeout(() => loadFile(), 2000);
+      } else {
+        setDeleteMsg({ type: 'error', text: result.error || 'Delete failed.' });
+      }
+    } catch (e) {
+      setDeleteMsg({ type: 'error', text: String(e) });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleDownload = async () => {
     if (!file) return;
     setDecryptError(false);
@@ -261,13 +454,12 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       if (!response.ok) throw new Error('IPFS download failed');
       let blob = await response.blob();
 
-      // SEC-2 fix: Try to decrypt if encryption keys are available in localStorage
+      // Try to decrypt if encryption keys are available
       const encKey = getEncryptionKey(file.fileId);
       if (encKey) {
         try {
           blob = await decryptFile(blob, encKey.key, encKey.iv);
         } catch {
-          // Decryption failed — file might not be encrypted or key is wrong
           console.warn('Decryption failed, saving encrypted blob as-is');
           setDecryptError(true);
         }
@@ -315,13 +507,14 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isOwner = wallet.address === file.owner;
+  const isDeleted = Number(file.price) === 0 && file.accessCount === BigInt(0);
 
   return (
     <div className="min-h-[80vh] py-12">
       <QRCodeModal
         isOpen={qrModalOpen}
         onClose={() => setQrModalOpen(false)}
-        fileId={id}
+        fileId={fileKey}
         fileName={file.name}
         ipfsCid={file.cid}
         mode={qrMode}
@@ -341,7 +534,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         >
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
-            <Card gradient>
+            <Card gradient={!isDeleted}>
               <div className="flex items-start gap-4 mb-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100">
                   <FileText className="h-8 w-8 text-green-600" />
@@ -349,16 +542,21 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="text-xl font-bold text-green-900">{file.name}</h1>
-                    <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'}>
-                      {Number(fromMicro(file.price)) === 0 ? 'Free' : `${fromMicro(file.price)} Credits`}
-                    </Badge>
-                    {isOwner && (
+                    {isDeleted && (
+                      <Badge variant="default">Deleted</Badge>
+                    )}
+                    {!isDeleted && (
+                      <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'>
+                        {Number(fromMicro(file.price)) === 0 ? 'Free' : `${fromMicro(file.price)} Credits`}
+                      </Badge>
+                    )}
+                    {isOwner && !isDeleted && (
                       <Badge variant="info">
                         <Eye className="h-3 w-3 mr-1" />
                         Your File
                       </Badge>
                     )}
-                    {hasAccess_ && (
+                    {hasAccess_ && !isOwner && (
                       <Badge variant="success">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         Access Granted
@@ -366,15 +564,13 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                     )}
                   </div>
                   <p className="mt-1 text-sm text-gray-500 font-mono truncate">{file.cid}</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    TX: {file.txId ? `${file.txId.slice(0, 16)}...` : 'Pending'}
-                  </p>
+                  {file.blockHeight > 0 && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Block {file.blockHeight} · {new Date(file.createdAt * 1000).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
-
-              <p className="text-gray-600 leading-relaxed">
-                Stored on IPFS with ZK-powered access control. Only authorized addresses can decrypt and download this file.
-              </p>
 
               <div className="mt-6 grid grid-cols-3 gap-4">
                 <div className="rounded-lg bg-white/60 p-3 text-center">
@@ -383,7 +579,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
                 <div className="rounded-lg bg-white/60 p-3 text-center">
                   <p className="text-lg font-bold text-green-900">{Number(file.accessCount)}</p>
-                  <p className="text-xs text-gray-500">Downloads</p>
+                  <p className="text-xs text-gray-500">Accesses</p>
                 </div>
                 <div className="rounded-lg bg-white/60 p-3 text-center">
                   <p className="text-xs font-bold text-green-900 truncate">
@@ -395,71 +591,73 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
             </Card>
 
             {/* Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Actions</CardTitle>
-              </CardHeader>
-              <div className="space-y-3">
-                {hasAccess_ || isOwner ? (
-                  <>
-                    <Button onClick={handleDownload} isLoading={downloading} size="lg" className="w-full">
-                      <Download className="h-5 w-5" />
-                      Download File
-                    </Button>
-                    {decryptError && (
-                      <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>Decryption failed. The downloaded file may still be encrypted. Check your browser console for details.</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      onClick={handleRequestAccess}
-                      isLoading={requesting}
-                      size="lg"
-                      className="w-full"
-                    >
-                      {payStep === 'transfer' ? (
-                        <>
-                          <CreditCard className="h-5 w-5" />
-                          Transferring {fromMicro(file.price)} Credits...
-                        </>
-                      ) : payStep === 'grant' ? (
-                        <>
-                          <Lock className="h-5 w-5 animate-pulse" />
-                          Recording Access on-chain...
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="h-5 w-5" />
-                          {Number(fromMicro(file.price)) > 0
-                            ? `Pay ${fromMicro(file.price)} Credits for Access`
-                            : 'Request Access'}
-                        </>
+            {!isDeleted && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actions</CardTitle>
+                </CardHeader>
+                <div className="space-y-3">
+                  {hasAccess_ || isOwner ? (
+                    <>
+                      <Button onClick={handleDownload} isLoading={downloading} size="lg" className="w-full">
+                        <Download className="h-5 w-5" />
+                        Download File
+                      </Button>
+                      {decryptError && (
+                        <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>Decryption failed. The downloaded file may still be encrypted.</span>
+                        </div>
                       )}
-                    </Button>
-                    {payStep === 'error' && payError && (
-                      <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>{payError}</span>
-                      </div>
-                    )}
-                    {payStep === 'done' && (
-                      <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                        <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        <span>Access granted! You can now download.</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                <Button onClick={handleCopyLink} variant="secondary" className="w-full">
-                  {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  {copied ? 'Link Copied!' : 'Copy Share Link'}
-                </Button>
-              </div>
-            </Card>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={handleRequestAccess}
+                        isLoading={requesting}
+                        size="lg"
+                        className="w-full"
+                      >
+                        {payStep === 'transfer' ? (
+                          <>
+                            <CreditCard className="h-5 w-5" />
+                            Transferring {fromMicro(file.price)} Credits...
+                          </>
+                        ) : payStep === 'grant' ? (
+                          <>
+                            <Lock className="h-5 w-5 animate-pulse" />
+                            Recording Access on-chain...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-5 w-5" />
+                            {Number(fromMicro(file.price)) > 0
+                              ? `Pay ${fromMicro(file.price)} Credits for Access`
+                              : 'Request Access'}
+                          </>
+                        )}
+                      </Button>
+                      {payStep === 'error' && payError && (
+                        <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>{payError}</span>
+                        </div>
+                      )}
+                      {payStep === 'done' && (
+                        <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>Access granted! You can now download.</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <Button onClick={handleCopyLink} variant="secondary" className="w-full">
+                    {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copied ? 'Link Copied!' : 'Copy Share Link'}
+                  </Button>
+                </div>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -476,9 +674,9 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">File ID</span>
+                  <span className="text-gray-500">File Key</span>
                   <span className="font-mono text-green-800 text-xs truncate max-w-[120px]">
-                    {file.fileId.slice(0, 12)}...
+                    {fileKey.slice(0, 12)}...
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -504,6 +702,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="flex justify-between">
                   <span className="text-gray-500">Blockchain</span>
                   <span className="text-green-900">Aleo</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Status</span>
+                  <span className="text-green-900">{isDeleted ? 'Deleted' : 'Active'}</span>
                 </div>
               </div>
             </Card>
@@ -561,7 +763,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
             </Card>
 
             {/* Owner actions */}
-            {isOwner && (
+            {isOwner && !isDeleted && (
               <div className="space-y-4">
                 {/* Grant Access */}
                 <Card>
@@ -605,7 +807,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                     </CardTitle>
                   </CardHeader>
                   <p className="text-sm text-gray-500 mb-3">
-                    Remove a user's access to this file.
+                    Remove a user&apos;s access to this file.
                   </p>
                   <input
                     type="text"
@@ -666,8 +868,78 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
                 </Card>
+
+                {/* Update Name */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Edit3 className="h-4 w-4 text-purple-500" />
+                      Update Name
+                    </CardTitle>
+                  </CardHeader>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Change the file name shown on-chain.
+                  </p>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="New file name..."
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm mb-2 focus:outline-none focus:border-green-400"
+                  />
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    isLoading={nameLoading}
+                    onClick={handleUpdateName}
+                  >
+                    Update Name
+                  </Button>
+                  {nameMsg && (
+                    <div className={`mt-2 text-sm rounded-lg p-2 ${nameMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      {nameMsg.text}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Delete File */}
+                <Card className="border-red-200">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                      Delete File
+                    </CardTitle>
+                  </CardHeader>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Remove from public listings. IPFS content persists.
+                  </p>
+                  <Button
+                    variant="danger"
+                    className="w-full"
+                    isLoading={deleteLoading}
+                    onClick={handleDeleteFile}
+                  >
+                    Delete File
+                  </Button>
+                  {deleteMsg && (
+                    <div className={`mt-2 text-sm rounded-lg p-2 ${deleteMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      {deleteMsg.text}
+                    </div>
+                  )}
+                </Card>
               </div>
             )}
+
+            {/* Refresh */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => loadFile()}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
           </div>
         </motion.div>
       </div>

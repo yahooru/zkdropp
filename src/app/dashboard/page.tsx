@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { LayoutDashboard, FileText, Download, Share2, Lock, Eye, Trash2, Copy, CheckCircle2, ExternalLink } from 'lucide-react';
 import { useWallet } from '@/lib/wallet';
 import { aleoConfig, fromMicro } from '@/lib/aleo';
-import { getUserFiles, getAddressTransactions, getBalances, deleteFile, removeFromRegistry } from '@/lib/zkdrop';
+import { getUserFiles, getAddressTransactions, getBalances, removeFile, removeFileByKey } from '@/lib/zkdrop';
 import type { ZKDropFile, ZKDropTransaction } from '@/lib/zkdrop';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                             </Badge>
                           )}
                           <span className="text-xs text-gray-400">
-                            {Number(file.accessCount)} downloads
+                            {Number(file.accessCount)} accesses
                           </span>
                           <span className="text-xs text-gray-400">
                             {new Date(file.createdAt * 1000).toLocaleDateString()}
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                     variant="danger"
                     className="flex-1"
                     onClick={() => {
-                      deleteFile(deletingId);
+                      removeFileByKey(deletingId);
                       setFiles(prev => prev.filter(f => f.fileKey !== deletingId));
                       setDeletingId(null);
                     }}
