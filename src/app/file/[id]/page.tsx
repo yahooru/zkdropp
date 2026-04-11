@@ -438,7 +438,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     try {
       const fileRecordCipher = await findOwnerFileRecord();
       if (!fileRecordCipher) {
-        setDeleteMsg({ type: 'error', text: 'Could not find your FileRecord in the wallet.' });
+        setDeleteMsg({ type: 'error', text: 'FileRecord not found in wallet. Ensure your upload transaction is confirmed and the record is in your wallet.' });
         setDeleteLoading(false);
         return;
       }
