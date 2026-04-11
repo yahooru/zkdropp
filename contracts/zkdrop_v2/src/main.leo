@@ -1,5 +1,5 @@
-// ZKDrop v2 - Privacy-first decentralized file sharing on Aleo
-// Smart Contract: zkdrop_v3_0001.aleo
+// ZKDrop v4 - Privacy-first decentralized file sharing on Aleo
+// Smart Contract: zkdrop_v4_0001.aleo
 //
 // Leo 4.0.0 syntax
 //
