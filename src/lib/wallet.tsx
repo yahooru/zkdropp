@@ -379,6 +379,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     transferCredits,
     transferUSAD,
     getFileRecords,
+    decryptRecord,
     deleteFile,
     updateName,
   };
