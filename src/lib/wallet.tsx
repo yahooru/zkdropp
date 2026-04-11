@@ -265,13 +265,13 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
 
   // Get FileRecord ciphertexts from the connected wallet.
   // The page component should decrypt these and find the one matching file_id + file_key.
-  const getFileRecords = useCallback(async (): Promise<string[]> => {
+  const getFileRecords = useCallback(async (): Promise<{ plaintext: string; ciphertext: string }[]> => {
     if (!isConnected || !address) return [];
     try {
       // aleo.requestRecords is available on the base wallet hook
       const records = await (aleo as any).requestRecords?.(aleoConfig.programs.zkdrop, true);
       if (!records) return [];
-      return records.map((r: any) => r.record || r.recordCiphertext || r.ciphertext || '');
+      return records.map((r: any) => ({ plaintext: r.plaintext || '', ciphertext: r.record || r.recordCiphertext || r.ciphertext || '' }));
     } catch {
       return [];
     }
