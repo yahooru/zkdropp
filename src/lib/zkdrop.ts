@@ -208,8 +208,14 @@ export async function getFileOwner(fileKey: string): Promise<string | null> {
       'file_owners',
       fileKey
     );
-    return owner != null ? String(owner) : null;
-  } catch {
+    if (owner == null) {
+      console.debug(`[ZKDrop] getFileOwner: no owner for fileKey=${fileKey} — file not on chain`);
+      return null;
+    }
+    const result = String(owner).trim();
+    return result || null;
+  } catch (error) {
+    console.warn(`[ZKDrop] getFileOwner error for fileKey=${fileKey}:`, error);
     return null;
   }
 }
