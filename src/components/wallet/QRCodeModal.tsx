@@ -11,13 +11,13 @@ import { copyToClipboard } from '@/lib/utils';
 interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  fileId: string;
+  fileKey: string;    // u64 literal file key (used in URL path)
   fileName: string;
   ipfsCid?: string;
   mode: 'link' | 'ipfs';
 }
 
-export function QRCodeModal({ isOpen, onClose, fileId, fileName, ipfsCid, mode }: QRCodeModalProps) {
+export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode }: QRCodeModalProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
