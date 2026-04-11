@@ -157,7 +157,6 @@ export async function sha256AccessKeyField(fileId: string, address: string): Pro
 export function cidToField(cid: string): string {
   return cid;
 }
-}
 
 /**
  * @deprecated Use sha256AccessKey(fileId, address) instead.
