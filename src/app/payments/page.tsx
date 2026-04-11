@@ -88,6 +88,12 @@ export default function PaymentsPage() {
       return;
     }
 
+    // Basic Aleo address validation
+    if (!/^aleo1[a-z0-9]{50,}$/i.test(transferTo.trim())) {
+      setTxStatus({ success: false, message: 'Invalid Aleo address format. Must start with aleo1 and be 55+ characters.' });
+      return;
+    }
+
     setTransferring(true);
     setTxStatus(null);
 
@@ -95,21 +101,36 @@ export default function PaymentsPage() {
       const amountMicro = toMicro(amountNum);
 
       if (activeTab === 'credits') {
-        const result = await wallet.transferCredits(transferTo, amountMicro);
+        const result = await wallet.transferCredits(transferTo.trim(), amountMicro);
         if (result.txId) {
-          setTxStatus({ success: true, message: `Transfer submitted! TX: ${result.txId.slice(0, 16)}... Confirming...` });
-          // M3 fix: poll balance until it updates (Aleo txs take ~30s to finalize)
-          pollBalance('credits', 3);
+          console.debug(`[ZKDrop] Transfer submitted: txId=${result.txId}`);
+          setTxStatus({ success: true, message: `Transfer submitted! TX: ${result.txId.slice(0, 16)}... Confirming on-chain...` });
+          // Wait for on-chain confirmation
+          const confirmed = await wallet.waitForTxConfirmation(result.txId, 20);
+          if (confirmed) {
+            setTxStatus({ success: true, message: `Transfer confirmed! TX: ${result.txId.slice(0, 16)}...` });
+          } else {
+            setTxStatus({ success: true, message: `Transfer submitted (pending): TX: ${result.txId.slice(0, 16)}...` });
+          }
+          // Poll balance to update display
+          pollBalance('credits', 8);
         } else {
-          setTxStatus({ success: false, message: result.error || 'Transfer failed' });
+          setTxStatus({ success: false, message: result.error || 'Transfer failed — check wallet' });
         }
       } else {
-        const result = await wallet.transferUSAD(transferTo, amountMicro);
+        const result = await wallet.transferUSAD(transferTo.trim(), amountMicro);
         if (result.txId) {
-          setTxStatus({ success: true, message: `Transfer submitted! TX: ${result.txId.slice(0, 16)}... Confirming...` });
-          pollBalance('usad', 3);
+          console.debug(`[ZKDrop] USAD Transfer submitted: txId=${result.txId}`);
+          setTxStatus({ success: true, message: `Transfer submitted! TX: ${result.txId.slice(0, 16)}... Confirming on-chain...` });
+          const confirmed = await wallet.waitForTxConfirmation(result.txId, 20);
+          if (confirmed) {
+            setTxStatus({ success: true, message: `Transfer confirmed! TX: ${result.txId.slice(0, 16)}...` });
+          } else {
+            setTxStatus({ success: true, message: `Transfer submitted (pending): TX: ${result.txId.slice(0, 16)}...` });
+          }
+          pollBalance('usad', 8);
         } else {
-          setTxStatus({ success: false, message: result.error || 'Transfer failed' });
+          setTxStatus({ success: false, message: result.error || 'Transfer failed — check wallet' });
         }
       }
 
@@ -131,7 +152,7 @@ export default function PaymentsPage() {
       );
       if (newBal !== balance[token]) {
         setBalance(b => ({ ...b, [token]: newBal }));
-        break; // Stop polling once balance changes
+        break;
       }
     }
   };
