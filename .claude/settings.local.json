@@ -4,7 +4,21 @@
       "Bash(cat node_modules/@provablehq/aleo-types/dist/*.d.ts)",
       "Bash(npx tsc:*)",
       "Bash(grep -r \"TransactionOptions\\\\|fee.*micro\\\\|feeCredits\\\\|Fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)",
-      "Bash(grep -r \"fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)"
+      "Bash(grep -r \"fee\" node_modules/@provablehq/aleo-types/dist/*.d.ts)",
+      "Bash(curl -s \"https://api.provable.com/v2\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://api.explorer.provable.com/v1\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://api.testnet.provable.com/v1\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://api.provable.com/v2/testnet\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://api.provable.com/v2/aleo/testnet\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "WebFetch(domain:testnet.explorer.provable.com)",
+      "Bash(curl -s \"https://api.provable.com/v2/testnet/\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://scanner.provable.scan/\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlock\",\"params\":[],\"id\":1}')",
+      "Bash(curl -s \"https://api.provable.com/v2/testnet\" -X POST -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"getProgramMappingValue\",\"params\":{\"programId\":\"zkdrop_v4_0001.aleo\",\"mappingName\":\"file_owners\",\"key\":\"1field\"},\"id\":1}')",
+      "Bash(curl -s \"https://api.provable.com/v2/testnet/program/zkdrop_v4_0001.aleo/mapping/file_owners/key/1u64\")",
+      "Bash(curl -s \"https://api.provable.com/v2/testnet/program/zkdrop_v4_0001.aleo/mapping/file_owners/1u64\")",
+      "Bash(curl:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('height:', d.get\\('block_height', d.get\\('height'\\)\\)\\); print\\('hash:', d.get\\('block_hash', d.get\\('block_info',{}\\).get\\('block_hash', d.get\\('hash'\\)\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\)\")"
     ]
   }
 }
