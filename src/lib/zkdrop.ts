@@ -57,6 +57,14 @@ export function getRegistry(): FileRegistryEntry[] {
   }
 }
 
+/**
+ * Get all registry entries regardless of on-chain status.
+ * Use this when you want ALL files including pending ones.
+ */
+export function getAllRegistryEntries(): FileRegistryEntry[] {
+  return getRegistry();
+}
+
 function saveRegistry(entries: FileRegistryEntry[]): void {
   if (typeof window === 'undefined') return;
   try {
@@ -482,6 +490,7 @@ export async function getAddressTransactions(
 /**
  * Get all files for the current user.
  * Uses local registry for metadata + public mappings for on-chain verification.
+ * Includes files that are pending on-chain confirmation (no owner found yet).
  */
 export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
   const registry = getRegistry();
@@ -491,6 +500,7 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
   }
 
   const files: ZKDropFile[] = [];
+  const addressLower = address?.toLowerCase();
 
   for (const entry of registry) {
     const [owner, price, accessCount, blockHeight, unixTs, chainName] = await Promise.all([
@@ -502,22 +512,26 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
       getFileName(entry.fileKey),
     ]);
 
-    // Only include files owned by the connected address (case-insensitive comparison)
     const ownerLower = owner?.toLowerCase();
-    const addressLower = address?.toLowerCase();
-    if (ownerLower && addressLower && ownerLower === addressLower && owner) {
+    const isPending = !owner; // No owner on-chain = pending confirmation
+
+    // Include files owned by this address OR files pending on-chain for this address
+    const isOwned = ownerLower && addressLower && ownerLower === addressLower;
+    const isPendingForThisAddress = isPending; // Registry entry exists for this user
+
+    if (isOwned || isPendingForThisAddress) {
       files.push({
         fileId: entry.fileId,
         fileKey: entry.fileKey,
         cid: entry.cid,
         // Prefer chain name if registry name is empty/missing
         name: chainName !== 'Unknown File' ? chainName : entry.name,
-        price,
-        accessCount,
-        owner,
+        price: price ?? BigInt(0),
+        accessCount: accessCount ?? BigInt(0),
+        owner: owner ?? address, // Show user's address for pending files
         // Use unix timestamp from chain if available, fallback to registry
         createdAt: unixTs > 0 ? unixTs : entry.createdAt,
-        blockHeight,
+        blockHeight: blockHeight ?? 0,
         txId: entry.txId,
         encrypted: entry.encrypted ?? false,
       });

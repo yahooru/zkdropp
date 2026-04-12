@@ -7,7 +7,7 @@ import { Upload, FileText, X, CheckCircle2, AlertCircle, Lock, Shield, Coins, Ke
 import { useDropzone } from 'react-dropzone';
 import { useWallet } from '@/lib/wallet';
 import { aleoConfig, toMicro } from '@/lib/aleo';
-import { registerFile, waitForOnChainConfirmation } from '@/lib/zkdrop';
+import { registerFile } from '@/lib/zkdrop';
 // FileRecord ciphertext will be retrieved from wallet via transaction history after upload.
 import { encryptFileForUpload, storeEncryptionKey } from '@/lib/crypto';
 import { Button } from '@/components/ui/Button';
@@ -145,15 +145,44 @@ export default function UploadPage() {
           unixTs,
         });
 
-        // Wait for on-chain confirmation before showing success
+        // Wait for transaction to be confirmed via wallet status check (supports shield_ IDs)
         setState((s) => ({ ...s, step: 'blockchain', txId: result.txId || null }));
-        const confirmed = await waitForOnChainConfirmation(fileKey, 20);
+        let confirmed = false;
+        let finalStatus = 'unknown';
+        for (let i = 0; i < 20; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const statusResult = await wallet.checkTransactionStatus(result.txId || '');
+          finalStatus = statusResult.status;
+          console.debug(`[ZKDrop] TX status check ${i + 1}/20: ${result.txId} → ${finalStatus}`);
+          if (finalStatus === 'confirmed') {
+            confirmed = true;
+            break;
+          }
+          if (finalStatus === 'rejected' || finalStatus === 'failed') {
+            console.error(`[ZKDrop] Transaction ${result.txId} was ${finalStatus}`);
+            break;
+          }
+        }
+
         if (confirmed) {
-          console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
+          // Transaction confirmed — verify file appears on-chain via RPC
+          const { getFileOwner } = await import('@/lib/zkdrop');
+          let ownerFound = false;
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 3000));
+            const owner = await getFileOwner(fileKey);
+            if (owner) {
+              console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}, owner=${owner}`);
+              ownerFound = true;
+              break;
+            }
+          }
+          if (!ownerFound) {
+            console.warn(`[ZKDrop] TX confirmed but file not yet visible in file_owners mapping for fileKey=${fileKey}`);
+          }
           setState((s) => ({ ...s, step: 'success', fileId }));
         } else {
-          // Show success anyway but warn user
-          console.warn(`[ZKDrop] File upload may still be pending on-chain. TX: ${result.txId}`);
+          console.warn(`[ZKDrop] Transaction ${result.txId} status: ${finalStatus} — file may still be pending on-chain.`);
           setState((s) => ({ ...s, step: 'success', fileId }));
         }
       } else if (result.error && result.error.includes('user rejected')) {

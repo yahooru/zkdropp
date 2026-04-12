@@ -28,21 +28,25 @@ export default function FilesPage() {
     const loadFiles = async () => {
       setLoading(true);
       try {
-        // Get total file count from the public mapping
-        const count = await getTotalFileCount();
-        setTotalOnChain(count);
-
-        if (count > BigInt(0)) {
-          // For public browsing, derive file keys from the local registry
-          const registry = getRegistry();
-          const ids = registry.map((e) => e.fileKey).slice(0, 20);
+        // Always load from local registry first (files may be pending on-chain confirmation)
+        const registry = getRegistry();
+        const ids = registry.map((e) => e.fileKey);
+        if (ids.length > 0) {
           const onChainFiles = await getFilesByIds(ids);
           setFiles(onChainFiles);
         } else {
           setFiles([]);
         }
+
+        // Also check on-chain counter for display
+        try {
+          const count = await getTotalFileCount();
+          setTotalOnChain(count);
+        } catch {
+          setTotalOnChain(null);
+        }
       } catch (error) {
-        console.error('Failed to load files from chain:', error);
+        console.error('Failed to load files:', error);
         setFiles([]);
       } finally {
         setLoading(false);
