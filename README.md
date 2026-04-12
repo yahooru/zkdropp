@@ -9,20 +9,74 @@
 
 ZKDrop is a privacy-first decentralized file sharing platform. Files are AES-256-GCM encrypted client-side, stored on IPFS, access controlled via Aleo zero-knowledge proofs, and payments via Aleo Credits or USAD stablecoins.
 
+**Live:** [https://zkdrop-puce.vercel.app](https://zkdrop-puce.vercel.app)
+
 ---
 
-## Quick Start
+## How It Works
 
-```bash
-git clone https://github.com/your-repo/zkdrop.git
-cd zkdrop
-npm install
-cp .env.local.example .env.local
-# Edit .env.local with your Pinata JWT and RPC URL
-npm run dev
+### Upload Flow
+
+```
+User Browser                                    Aleo Network              IPFS / Pinata
+   │                                               │                        │
+   ├── Select file                                 │                        │
+   ├── AES-256-GCM encrypt (key stays local)      │                        │
+   ├── POST /api/upload ────────────────────────────────────────────────►  Upload encrypted blob
+   │                                               │                        │  returns CID
+   ├── compute sha256(CID_bytes)                   │                        │
+   │   file_key = sha256[0..8] as u64              │                        │
+   │   file_id  = sha256(CID_bytes) as field       │                        │
+   ├── call upload_file(                           │                        │
+   │     name, ipfs_hash, price,                   │                        │
+   │     file_key, file_id, unix_ts                 │                        │
+   │     + fee (2 credits) ──────────────────────► │ Deploy to Aleo         │
+   │                                               │                        │
+   ├── Wallet returns shield_ ID (local ref)       │                        │
+   │   Poll wallet.transactionStatus(shield_)       │                        │
+   │   until status='accepted' → get real at1... ID │                        │
+   │                                               │                        │
+   ├── Poll file_owners[file_key] until set         │                        │
+   │   + verify tx on-chain via getTransaction      │                        │
+   │                                               │                        │
+   ├── Store encryption key in localStorage         │                        │
+   ├── Register in localStorage registry            │                        │
+   └── Done (localStorage has metadata)             │                        │
+                                                   │                        │
+   Public Aleo mappings:                           │                        │
+     file_owners[file_key] → address               │                        │
+     file_prices[file_key] → u64                    │                        │
+     file_names[file_key] → [u8; 32]               │                        │
 ```
 
-Visit [http://localhost:3000](http://localhost:3000)
+### Access Flow
+
+```
+Requester Browser                               Aleo Network              IPFS
+   │                                               │                        │
+   ├── Browse files (from Aleo mappings)            │                        │
+   ├── Click file → get fileKey + fileId            │                        │
+   ├── For paid files: pay credits.aleo transfer    │                        │
+   ├── call request_access(                         │                        │
+   │     file_key, file_id, ipfs_hash,             │                        │
+   │     file_name, access_key, unix_ts) ────────► │                        │
+   ├── AccessRecord returned to wallet             │                        │
+   ├── Frontend decrypts AccessRecord               │                        │
+   ├── Fetch encrypted blob from IPFS ────────────────────────────────►   │
+   ├── Decrypt with stored key                     │                        │
+   └── Download file                               │                        │
+```
+
+### Key Design Decisions
+
+| Concern | Solution |
+|---------|----------|
+| **File content privacy** | AES-256-GCM client-side encryption. Key never leaves browser. |
+| **Access list privacy** | `access_key = sha256(file_id + address)[0..8]`. Nobody can enumerate who has access. |
+| **Ownership proof** | Owner functions require the private `FileRecord` from the wallet — ZK proves you own it. |
+| **Transaction tracking** | Shield wallet `transactionStatus` resolves `shield_` IDs to real `at1...` on-chain IDs. On-chain status verified via `getTransaction` + `file_owners` mapping. |
+| **Pending vs confirmed** | If tx times out, file stays in local registry as "pending" — visible in dashboard. User can re-check status anytime via "Check Status Now". |
+| **RPC latency** | Explorer API can be ~45 min behind latest block. Wallet adapter polling is the primary confirmation path for `shield_` IDs. |
 
 ---
 
@@ -31,34 +85,15 @@ Visit [http://localhost:3000](http://localhost:3000)
 | Feature | Description |
 |---------|-------------|
 | **AES-256-GCM Encryption** | Files encrypted client-side. Only the uploader has the key. |
-| **IPFS Storage** | Encrypted blobs on IPFS. Raw content never touches the chain. |
+| **IPFS Storage** | Encrypted blobs on IPFS via Pinata. Raw content never touches the chain. |
 | **ZK Access Control** | Access grants via Aleo records. No enumeration possible. |
 | **Per-User Hashed Keys** | `access_key = sha256(file_id + address)[0..8]` — nobody can enumerate access lists. |
 | **FileRecord Ownership Proof** | Owner functions (`revoke`, `update_price`, `delete`, `update_name`) require the private FileRecord from the wallet. |
 | **USAD + Credits Payments** | Buildathon Rule 4 compliant. |
 | **QR Code Sharing** | Share via link or IPFS QR — scan with any wallet. |
 | **Leo 4.0.0 syntax** | All functions use `fn` keyword, `final {}` blocks, and proper `owner: address` record fields. |
-
----
-
-## Architecture
-
-```
-User Browser                          Aleo Network                     IPFS / Pinata
-    │                                    │                              │
-    ├─ Select file                        │                              │
-    ├─ AES-256-GCM encrypt             │                              │
-    ├─ POST /api/upload ─────────────────────────────────► Upload encrypted blob
-    │                                    │                              │
-    ├─ compute sha256(ipfs_bytes)        │                              │
-    ├─ call upload_file(6 params) ─────► │ Deploy to Aleo blockchain
-    │◄── FileRecord (encrypted)          │                              │
-    ├─ store encryption key in browser   │                              │
-    └─ register in localStorage         │                              │
-                                     │                              │
-                                     │  Public mappings (metadata only) │
-                                     ◄─ getFileOwner, getFilePrice, etc.
-```
+| **Wallet Transaction Polling** | Shields `shield_` local IDs are resolved via `transactionStatus` until the real `at1...` ID is returned. |
+| **Manual Re-check** | "Check Status Now" button on upload success page lets users manually poll for confirmation. |
 
 ---
 
@@ -70,6 +105,7 @@ User Browser                          Aleo Network                     IPFS / Pi
 | **Styling** | Tailwind CSS 4, Framer Motion | Design & animations |
 | **Blockchain** | Aleo testnet, Leo 4.0.0 contracts | Privacy logic |
 | **Wallet** | @provablehq/aleo-wallet-adaptor-react | Connection to Shield, Leo, Soter, Puzzle wallets |
+| **RPC** | api.explorer.provable.com/v1 | On-chain queries (mappings, transactions, blocks) |
 | **Storage** | IPFS via Pinata | Decentralized file blobs |
 | **Payments** | credits.aleo, usad_stablecoin.aleo | Token transfers |
 
@@ -144,41 +180,16 @@ const accessKey = `${new DataView(buf).getBigUint64(0)}u64`;
 
 ---
 
-## Environment Variables
+## Supported Wallets
 
-```env
-# Aleo Network
-NEXT_PUBLIC_RPC_URL=https://api.provable.com/v2
-NEXT_PUBLIC_NETWORK=testnet
+| Wallet | Adapter | Status |
+|--------|---------|--------|
+| **Shield Wallet** | `@provablehq/aleo-wallet-adaptor-shield` | Recommended |
+| **Leo Wallet** | `@provablehq/aleo-wallet-adaptor-leo` | Supported |
+| **Soter Wallet** | `@provablehq/aleo-wallet-adaptor-soter` | Supported |
+| **Puzzle Wallet** | `@provablehq/aleo-wallet-adaptor-puzzle` | Supported |
 
-# Deployed Contract
-NEXT_PUBLIC_ZKDROP_PROGRAM_ID=zkdrop_v4_0001.aleo
-
-# Payments
-NEXT_PUBLIC_CREDITS_PROGRAM_ID=credits.aleo
-NEXT_PUBLIC_USAD_PROGRAM_ID=usad_stablecoin.aleo
-
-# IPFS
-NEXT_PUBLIC_PINATA_GATEWAY=https://gateway.pinata.cloud/ipfs/
-PINATA_JWT=your_jwt_here
-```
-
----
-
-## Building & Deployment
-
-```bash
-# Build contract
-cd contracts/zkdrop_v2
-leo build
-
-# Deploy to testnet
-leo deploy \
-  --private-key YOUR_PRIVATE_KEY \
-  --network testnet \
-  --endpoint https://api.explorer.provable.com/v1 \
-  --broadcast --yes
-```
+Connect via the built-in wallet modal. No custom setup needed.
 
 ---
 
@@ -210,6 +221,61 @@ leo deploy \
 
 ---
 
+## Quick Start
+
+```bash
+git clone https://github.com/your-repo/zkdrop.git
+cd zkdrop
+npm install
+cp .env.local.example .env.local
+# Edit .env.local with your Pinata JWT and RPC URL
+npm run dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Environment Variables
+
+```env
+# Aleo Network
+NEXT_PUBLIC_RPC_URL=https://api.explorer.provable.com/v1
+NEXT_PUBLIC_NETWORK=testnet
+
+# Deployed Contract
+NEXT_PUBLIC_ZKDROP_PROGRAM_ID=zkdrop_v4_0001.aleo
+
+# Payments
+NEXT_PUBLIC_CREDITS_PROGRAM_ID=credits.aleo
+NEXT_PUBLIC_USAD_PROGRAM_ID=usad_stablecoin.aleo
+
+# IPFS
+NEXT_PUBLIC_PINATA_GATEWAY=https://gateway.pinata.cloud/ipfs/
+PINATA_JWT=your_pinata_jwt_here
+```
+
+> **Important:** `PINATA_JWT` must NOT be prefixed with `NEXT_PUBLIC_` — it is used server-side only (via `/api/upload`) so it never reaches the browser.
+
+---
+
+## Building & Deployment
+
+```bash
+# Build contract
+cd contracts/zkdrop_v2
+leo build
+
+# Deploy to testnet
+leo deploy \
+  --private-key YOUR_PRIVATE_KEY \
+  --network testnet \
+  --endpoint https://api.explorer.provable.com/v1 \
+  --broadcast --yes
+```
+
+---
+
 ## File Structure
 
 ```
@@ -221,31 +287,31 @@ zkdrop/
 ├── src/
 │   ├── app/                      # Next.js App Router pages
 │   │   ├── page.tsx               # Homepage
-│   │   ├── upload/page.tsx        # Upload flow
+│   │   ├── upload/page.tsx        # Upload flow (IPFS + Aleo + polling)
 │   │   ├── files/page.tsx         # Browse files
 │   │   ├── file/[id]/page.tsx     # File detail + owner actions
 │   │   ├── dashboard/page.tsx      # User dashboard
 │   │   ├── payments/page.tsx       # Credits/USAD transfers
 │   │   ├── api/upload/route.ts     # Server-side IPFS proxy (JWT stays server-side)
 │   │   └── layout/providers       # Wallet + ZKDrop providers
-│   ├── components/                 # Reusable UI
+│   ├── components/               # Reusable UI components
 │   └── lib/
-│       ├── wallet.tsx              # Wallet provider + hooks
-│       ├── aleo.ts                 # Aleo config + constants
-│       ├── zkdrop.ts              # On-chain service layer
-│       ├── ipfs.ts                # IPFS upload/download
-│       ├── crypto.ts               # AES-256-GCM encryption
-│       └── utils.ts               # Shared utilities
+│       ├── wallet.tsx             # Wallet provider + hooks (shield_, Leo, Soter, Puzzle)
+│       ├── aleo.ts                # Aleo config + constants
+│       ├── zkdrop.ts             # On-chain service layer (polling, registry, mappings)
+│       ├── ipfs.ts               # IPFS upload/download
+│       ├── crypto.ts             # AES-256-GCM encryption
+│       └── utils.ts              # Shared utilities (toFixedLengthBytes, isWalletLocalTransactionId)
 ├── .env.local                    # Local overrides (JWT, RPC, program ID)
 └── next.config.ts               # Security headers + image optimization
 ```
 
 ---
 
-## Supported Wallets
-
-Shield Wallet, Leo Wallet, Soter Wallet, Puzzle Wallet. Connect via the built-in modal. No custom setup needed.
-
 ## Supported Networks
 
 Testnet (current). Mainnet-compatible — update RPC URL + program IDs to deploy.
+
+## License
+
+MIT
