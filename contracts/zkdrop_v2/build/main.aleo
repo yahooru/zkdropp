@@ -1,4 +1,4 @@
-program zkdrop_v4_0001.aleo;
+program zkdrop_v4_0002.aleo;
 
 record FileRecord:
     owner as address.private;
@@ -62,27 +62,27 @@ function upload_file:
     input r3 as u64.private;
     input r4 as field.private;
     input r5 as u64.private;
-    cast r0[0u32] r0[1u32] r0[2u32] r0[3u32] r0[4u32] r0[5u32] r0[6u32] r0[7u32] r0[8u32] r0[9u32] r0[10u32] r0[11u32] r0[12u32] r0[13u32] r0[14u32] r0[15u32] r0[16u32] r0[17u32] r0[18u32] r0[19u32] r0[20u32] r0[21u32] r0[22u32] r0[23u32] r0[24u32] r0[25u32] r0[26u32] r0[27u32] r0[28u32] r0[29u32] r0[30u32] r0[31u32] into r6 as [u8; 32u32];
-    cast self.caller r4 r0 r1 r2 0u64 r5 r3 into r7 as FileRecord.record;
-    async upload_file r3 self.caller r2 r6 r5 into r8;
-    output r7 as FileRecord.record;
-    output r8 as zkdrop_v4_0001.aleo/upload_file.future;
+    cast self.caller r4 r0 r1 r2 0u64 r5 r3 into r6 as FileRecord.record;
+    async upload_file r0 r3 self.caller r2 r5 into r7;
+    output r6 as FileRecord.record;
+    output r7 as zkdrop_v4_0002.aleo/upload_file.future;
 
 finalize upload_file:
-    input r0 as u64.public;
-    input r1 as address.public;
-    input r2 as u64.public;
-    input r3 as [u8; 32u32].public;
+    input r0 as [u8; 64u32].public;
+    input r1 as u64.public;
+    input r2 as address.public;
+    input r3 as u64.public;
     input r4 as u64.public;
-    get.or_use file_counter[0u64] 0u64 into r5;
-    add r5 1u64 into r6;
-    set r6 into file_counter[0u64];
-    set r1 into file_owners[r0];
-    set r2 into file_prices[r0];
-    set 0u64 into file_counters[r0];
-    set r3 into file_names[r0];
-    set block.height into file_created_at[r0];
-    set r4 into file_unix_ts[r0];
+    cast r0[0u32] r0[1u32] r0[2u32] r0[3u32] r0[4u32] r0[5u32] r0[6u32] r0[7u32] r0[8u32] r0[9u32] r0[10u32] r0[11u32] r0[12u32] r0[13u32] r0[14u32] r0[15u32] r0[16u32] r0[17u32] r0[18u32] r0[19u32] r0[20u32] r0[21u32] r0[22u32] r0[23u32] r0[24u32] r0[25u32] r0[26u32] r0[27u32] r0[28u32] r0[29u32] r0[30u32] r0[31u32] into r5 as [u8; 32u32];
+    get.or_use file_counter[0u64] 0u64 into r6;
+    add r6 1u64 into r7;
+    set r7 into file_counter[0u64];
+    set r2 into file_owners[r1];
+    set r3 into file_prices[r1];
+    set 0u64 into file_counters[r1];
+    set r5 into file_names[r1];
+    set block.height into file_created_at[r1];
+    set r4 into file_unix_ts[r1];
 
 function request_access:
     input r0 as u64.private;
@@ -95,7 +95,7 @@ function request_access:
     cast self.caller r1 r2 r6 r5 0u64 r4 into r7 as AccessRecord.record;
     async request_access r0 r4 into r8;
     output r7 as AccessRecord.record;
-    output r8 as zkdrop_v4_0001.aleo/request_access.future;
+    output r8 as zkdrop_v4_0002.aleo/request_access.future;
 
 finalize request_access:
     input r0 as u64.public;
@@ -115,7 +115,7 @@ function revoke_access:
     assert.eq r3.file_id r1;
     assert.eq r3.file_key r0;
     async revoke_access r2 into r4;
-    output r4 as zkdrop_v4_0001.aleo/revoke_access.future;
+    output r4 as zkdrop_v4_0002.aleo/revoke_access.future;
 
 finalize revoke_access:
     input r0 as u64.public;
@@ -132,7 +132,7 @@ function update_price:
     cast r3.owner r3.file_id r3.name r3.ipfs_hash r2 r3.access_count r3.created_at r3.file_key into r4 as FileRecord.record;
     async update_price r0 r2 into r5;
     output r4 as FileRecord.record;
-    output r5 as zkdrop_v4_0001.aleo/update_price.future;
+    output r5 as zkdrop_v4_0002.aleo/update_price.future;
 
 finalize update_price:
     input r0 as u64.public;
@@ -147,7 +147,7 @@ function delete_file:
     assert.eq r2.file_id r1;
     assert.eq r2.file_key r0;
     async delete_file r0 into r3;
-    output r3 as zkdrop_v4_0001.aleo/delete_file.future;
+    output r3 as zkdrop_v4_0002.aleo/delete_file.future;
 
 finalize delete_file:
     input r0 as u64.public;
@@ -162,16 +162,16 @@ function update_name:
     assert.eq r3.owner self.caller;
     assert.eq r3.file_id r1;
     assert.eq r3.file_key r0;
-    cast r2[0u32] r2[1u32] r2[2u32] r2[3u32] r2[4u32] r2[5u32] r2[6u32] r2[7u32] r2[8u32] r2[9u32] r2[10u32] r2[11u32] r2[12u32] r2[13u32] r2[14u32] r2[15u32] r2[16u32] r2[17u32] r2[18u32] r2[19u32] r2[20u32] r2[21u32] r2[22u32] r2[23u32] r2[24u32] r2[25u32] r2[26u32] r2[27u32] r2[28u32] r2[29u32] r2[30u32] r2[31u32] into r4 as [u8; 32u32];
-    cast r3.owner r3.file_id r2 r3.ipfs_hash r3.price r3.access_count r3.created_at r3.file_key into r5 as FileRecord.record;
-    async update_name r0 r4 into r6;
-    output r5 as FileRecord.record;
-    output r6 as zkdrop_v4_0001.aleo/update_name.future;
+    cast r3.owner r3.file_id r2 r3.ipfs_hash r3.price r3.access_count r3.created_at r3.file_key into r4 as FileRecord.record;
+    async update_name r0 r2 into r5;
+    output r4 as FileRecord.record;
+    output r5 as zkdrop_v4_0002.aleo/update_name.future;
 
 finalize update_name:
     input r0 as u64.public;
-    input r1 as [u8; 32u32].public;
-    set r1 into file_names[r0];
+    input r1 as [u8; 64u32].public;
+    cast r1[0u32] r1[1u32] r1[2u32] r1[3u32] r1[4u32] r1[5u32] r1[6u32] r1[7u32] r1[8u32] r1[9u32] r1[10u32] r1[11u32] r1[12u32] r1[13u32] r1[14u32] r1[15u32] r1[16u32] r1[17u32] r1[18u32] r1[19u32] r1[20u32] r1[21u32] r1[22u32] r1[23u32] r1[24u32] r1[25u32] r1[26u32] r1[27u32] r1[28u32] r1[29u32] r1[30u32] r1[31u32] into r2 as [u8; 32u32];
+    set r2 into file_names[r0];
 
 constructor:
     assert.eq edition 0u16;

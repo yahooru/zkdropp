@@ -1,5 +1,5 @@
 {
-  "program": "zkdrop_v4_0001.aleo",
+  "program": "zkdrop_v4_0002.aleo",
   "structs": [],
   "records": [
     {
@@ -374,7 +374,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -471,7 +471,7 @@
               "path": [
                 "AccessRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -524,7 +524,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -579,7 +579,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -592,7 +592,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -634,7 +634,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -694,7 +694,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"
@@ -707,7 +707,7 @@
               "path": [
                 "FileRecord"
               ],
-              "program": "zkdrop_v4_0001.aleo"
+              "program": "zkdrop_v4_0002.aleo"
             }
           },
           "mode": "None"

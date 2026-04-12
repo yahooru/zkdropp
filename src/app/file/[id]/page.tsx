@@ -531,7 +531,17 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isOwner = wallet.address?.toLowerCase() === file.owner?.toLowerCase();
-  const isDeleted = !file.pending && Number(file.price) === 0 && file.accessCount === BigInt(0);
+  // A file is "deleted" if it was on-chain (not pending) but file_owners was cleared.
+  // We detect this by checking if owner exists, price=0, accessCount=0.
+  // But free files also have price=0 — so we use createdAt to distinguish:
+  // - Free file uploaded: createdAt = upload timestamp, price=0, accessCount=0
+  // - Deleted file: createdAt = old timestamp, price=0, accessCount=0
+  // Files with createdAt > 24h ago, price=0, accessCount=0 are likely deleted.
+  const isDeleted =
+    !file.pending &&
+    Number(file.price) === 0 &&
+    file.accessCount === BigInt(0) &&
+    Date.now() / 1000 - file.createdAt > 86400;
 
   return (
     <div className="min-h-[80vh] py-12">

@@ -130,14 +130,15 @@ export function removeFromRegistry(fileId: string): void {
  * This fixes RC1: same hash algorithm used by frontend (WebCrypto) and contract.
  *
  * @param ipfsBytes - 64-element byte array of the IPFS CID
- * @returns Aleo field literal: "0x<hex>field"
+ * @returns Aleo field literal: "<decimal>field"
  */
 export async function sha256ToField(bytes: number[]): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
   const hex = Array.from(new Uint8Array(buf))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-  return `0x${hex}field`;
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  return BigInt('0x' + clean).toString() + 'field';
 }
 
 /**
@@ -180,7 +181,7 @@ export async function sha256AccessKey(fileId: string, address: string): Promise<
  *
  * @param fileId - the file_id field literal (0x...field format)
  * @param address - Aleo address string
- * @returns Aleo field literal: "0x<hex>field"
+ * @returns Aleo field literal: "<decimal>field"
  */
 export async function sha256AccessKeyField(fileId: string, address: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -189,7 +190,7 @@ export async function sha256AccessKeyField(fileId: string, address: string): Pro
   const hex = Array.from(new Uint8Array(buf))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-  return `0x${hex}field`;
+  return BigInt('0x' + hex).toString() + 'field';
 }
 
 /**
@@ -434,7 +435,7 @@ export async function waitForOnChainConfirmation(
   console.debug(`[ZKDrop] Waiting for on-chain confirmation for fileKey=${fileKey}, txId=${txId ?? 'unknown'}, hasWalletCheck=${!!checkWalletTxStatus}`);
 
   for (let i = 0; i < maxRetries; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 2000));
 
     // Strategy 1: Poll the wallet adapter for transaction status
     // This is the ONLY way to resolve shield_ IDs to real at1... IDs
@@ -737,7 +738,7 @@ export async function getFileDetails(fileKey: string, fallbackOwner?: string): P
   }
 
   return {
-    fileId: local?.fileId || `0x${fileKey.replace('u64', '')}${'0'.repeat(64)}field`,
+    fileId: local?.fileId || `${BigInt(0)}field`, // fallback only for edge cases where local registry has no fileId
     fileKey,
     cid: local?.cid || '',
     // Prefer chain name over registry name

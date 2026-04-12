@@ -243,6 +243,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         function: functionName,
         inputs: inputs,
         fee: Math.floor(fee * 1000000),
+        privateFee: false, // Use public fee — deducts from on-chain Aleo credits balance
       };
       const result = await aleo.executeTransaction(options);
       console.debug(`[ZKDrop] executeTransaction result:`, result);
@@ -268,7 +269,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
       const { AleoNetworkClient } = await import('@provablehq/sdk');
       const client = new AleoNetworkClient(aleoConfig.rpcUrl);
       for (let i = 0; i < maxRetries; i++) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 2000));
         try {
           const tx = await client.getTransaction(txId) as WalletTransactionLike | null;
           if (tx && tx.status === 'confirmed') {
@@ -340,6 +341,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         function: 'transfer_public',
         inputs: [recipient, `${amount.toString()}u64`],
         fee: 2000000,
+        privateFee: false,
       };
       const result = await aleo.executeTransaction(options);
       return { txId: result?.transactionId, error: '' };
@@ -360,6 +362,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         function: 'transfer_public',
         inputs: [recipient, `${amount.toString()}u64`],
         fee: 2000000,
+        privateFee: false,
       };
       const result = await aleo.executeTransaction(options);
       return { txId: result?.transactionId, error: '' };
@@ -410,6 +413,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         function: 'delete_file',
         inputs: [fileKey, fileId, fileRecordCiphertext],
         fee: 2000000,
+        privateFee: false,
       };
       const result = await aleo.executeTransaction(options);
       return { txId: result?.transactionId, error: '' };
@@ -437,6 +441,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
         function: 'update_name',
         inputs: [fileKey, fileId, nameInput, fileRecordCiphertext],
         fee: 2000000,
+        privateFee: false,
       };
       const result = await aleo.executeTransaction(options);
       return { txId: result?.transactionId, error: '' };

@@ -54,7 +54,25 @@ export function toAleoByteArrayLiteral(value: string, length: number): string {
   return `[${toFixedLengthBytes(value, length).map((byte) => `${byte}u8`).join(', ')}]`;
 }
 
+/**
+ * Convert a hex string (with or without 0x prefix) to an Aleo field literal.
+ * Aleo field literals use the decimal representation followed by 'field'.
+ * Examples:
+ *   "0xabc123"       → "27478596field"  (hex as decimal + "field")
+ *   "0xdeadbeef"    → "3735928559field" (hex as decimal + "field")
+ *   "deadbeef"      → "3735928559field" (hex as decimal + "field")
+ */
+export function toAleoFieldLiteral(hexString: string): string {
+  const clean = hexString.startsWith('0x') ? hexString.slice(2) : hexString;
+  const decimalValue = BigInt('0x' + clean);
+  return decimalValue.toString() + 'field';
+}
+
 export function isWalletLocalTransactionId(txId: string): boolean {
+  // Wallet-local IDs are prefixed with 'shield_' and are NOT on-chain queryable.
+  // Real Aleo transaction IDs start with 'at1' (testnet) or 'au1' (mainnet).
+  // We also treat empty/null/undefined as non-local.
+  if (!txId || typeof txId !== 'string') return false;
   return txId.startsWith('shield_');
 }
 

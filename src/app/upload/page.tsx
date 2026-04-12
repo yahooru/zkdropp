@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { isWalletLocalTransactionId, toAleoByteArrayLiteral, toFixedLengthBytes } from '@/lib/utils';
+import { isWalletLocalTransactionId, toAleoByteArrayLiteral, toFixedLengthBytes, toAleoFieldLiteral } from '@/lib/utils';
 
 type UploadStep = 'idle' | 'uploading' | 'ipfs' | 'blockchain' | 'success' | 'error';
 
@@ -75,18 +75,28 @@ export default function UploadPage() {
     setCheckingStatus(false);
   }, []);
 
+  // One-shot status check: polls 10 times at 2s intervals (20s total).
+  // Designed to be triggered manually by the user after seeing the success screen.
   const handleCheckStatus = useCallback(async () => {
-    if (!state.fileKey || !state.txId) return;
+    if (!state.fileKey || !state.txId) {
+      return;
+    }
     setCheckingStatus(true);
     try {
       const result = await waitForOnChainConfirmation(
         state.fileKey,
-        20,
+        10,
         state.txId ?? undefined,
         wallet.checkTransactionStatus
       );
       if (result.confirmed) {
         setState((current) => ({ ...current, confirmationStatus: 'confirmed' }));
+      } else if (result.rejected) {
+        setState((current) => ({
+          ...current,
+          step: 'error',
+          error: `Blockchain rejected the transaction: ${result.reason ?? 'contract execution failed'}`,
+        }));
       }
     } finally {
       setCheckingStatus(false);
@@ -128,7 +138,8 @@ export default function UploadPage() {
       const hashHex = Array.from(new Uint8Array(hashBuffer))
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
-      const fileId = `0x${hashHex}field`;
+      // file_id: Aleo field literal — decimal hex value + 'field' suffix
+      const fileId = toAleoFieldLiteral(hashHex);
       const fileKey = `${new DataView(hashBuffer).getBigUint64(0).toString()}u64`;
       const unixTs = Math.floor(Date.now() / 1000);
       const priceMicro = toMicro(normalizedPrice);
@@ -147,7 +158,11 @@ export default function UploadPage() {
         `[ZKDrop] program=${aleoConfig.programs.zkdrop}, function=upload_file, fileKey=${fileKey}, fileId=${fileId}`
       );
 
-      const result = await wallet.execute(aleoConfig.programs.zkdrop, 'upload_file', inputs, 2.0);
+      // Use 10 credits fee — higher fee gives the proving service more time/computation
+      // budget to generate the ZK proof for the complex upload_file function.
+      // The actual Aleo fee for finalize execution is tiny (~0.001 credits);
+      // the extra goes to the proving service's computational cost.
+      const result = await wallet.execute(aleoConfig.programs.zkdrop, 'upload_file', inputs, 10.0);
       console.debug('[ZKDrop] Upload result: txId=', result.txId, 'error=', result.error);
 
       if (!result.txId) {
@@ -181,11 +196,13 @@ export default function UploadPage() {
 
       setState((current) => ({ ...current, step: 'blockchain', txId: result.txId ?? null }));
 
+      // Poll until confirmed or timeout (2s intervals).
+      // Shield Wallet ZK proving can take 30s–3min depending on network load.
+      // We give it 40 retries = ~80s for the quick poll on success screen.
+      // The "Check Status Now" button also triggers the same polling.
       const confirmResult = await waitForOnChainConfirmation(
         fileKey,
-        // Retry every 3s: 30 retries = ~1.5 min for shield_ IDs (wallet polling)
-        // or 20 retries = ~1 min for real at1... IDs (RPC polling)
-        isWalletLocalTransactionId(result.txId) ? 30 : 20,
+        isWalletLocalTransactionId(result.txId) ? 40 : 20,
         result.txId ?? undefined,
         wallet.checkTransactionStatus
       );
@@ -405,12 +422,12 @@ export default function UploadPage() {
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
               <CardTitle className="text-xl">
-                {state.confirmationStatus === 'confirmed' ? 'File Confirmed on Aleo' : 'File Submitted Successfully'}
+                {state.confirmationStatus === 'confirmed' ? 'File Confirmed on Aleo' : 'ZKDrop Submitted'}
               </CardTitle>
               <CardDescription className="mt-2">
                 {state.confirmationStatus === 'confirmed'
                   ? 'Your encrypted file is stored on IPFS and visible in Aleo mappings.'
-                  : 'Your encrypted file is stored on IPFS and saved locally. Aleo confirmation is still pending.'}
+                  : 'Your encrypted file is on IPFS and the transaction was submitted to Aleo. Shield Wallet is generating the ZK proof in the background.'}
               </CardDescription>
 
               <div className="mt-6 space-y-3 text-left">
@@ -426,42 +443,39 @@ export default function UploadPage() {
                   <p className="mb-1 text-xs font-medium text-green-600">ZKDrop Contract</p>
                   <p className="font-mono text-sm text-green-800">{aleoConfig.programs.zkdrop}</p>
                 </div>
-                <div
-                  className={`rounded-lg border p-4 ${
-                    state.confirmationStatus === 'confirmed'
-                      ? 'border-green-200 bg-green-50'
-                      : 'border-amber-200 bg-amber-50'
-                  }`}
-                >
-                  <p
-                    className={`mb-1 text-xs font-medium ${
-                      state.confirmationStatus === 'confirmed' ? 'text-green-700' : 'text-amber-700'
-                    }`}
-                  >
-                    On-chain Status
-                  </p>
-                  <p
-                    className={`text-sm ${
-                      state.confirmationStatus === 'confirmed' ? 'text-green-800' : 'text-amber-800'
-                    }`}
-                  >
-                    {state.confirmationStatus === 'confirmed'
-                      ? 'Confirmed in file_owners and ready to share.'
-                      : 'Pending confirmation. It will still appear in your dashboard as a pending upload.'}
-                  </p>
-                  {state.confirmationStatus === 'pending' && (
-                    <Button
-                      onClick={handleCheckStatus}
-                      isLoading={checkingStatus}
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      {checkingStatus ? 'Checking...' : 'Check Status Now'}
-                    </Button>
-                  )}
-                </div>
+
+                {state.confirmationStatus === 'confirmed' ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                    <p className="mb-1 text-xs font-medium text-green-700">On-chain Status</p>
+                    <p className="text-sm text-green-800">Confirmed — file is live and ready to share.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="mb-1 text-xs font-medium text-amber-700">On-chain Status</p>
+                    <p className="text-sm text-amber-800">
+                      ZK proof is generating. Shield Wallet creates the proof in the background — this can take 30 seconds to 3 minutes depending on network load.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2">
+                      <Button
+                        onClick={handleCheckStatus}
+                        isLoading={checkingStatus}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        {checkingStatus ? 'Checking...' : 'Check Status Now'}
+                      </Button>
+                      <a
+                        href={`https://explorer.provable.com/program/${aleoConfig.programs.zkdrop}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        View on Aleo Explorer
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex gap-3">

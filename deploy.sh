@@ -35,7 +35,7 @@ PRIVATE_KEY="$1"
 # Configuration
 NETWORK="testnet"
 ENDPOINT="https://api.explorer.provable.com/v1"
-PROGRAM_NAME="zkdrop_v3_0001.aleo"
+PROGRAM_NAME="zkdrop_v4_0002.aleo"
 CONTRACT_DIR="contracts/zkdrop_v2"
 
 echo -e "${GREEN}Configuration:${NC}"

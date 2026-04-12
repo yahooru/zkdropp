@@ -32,7 +32,17 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('latest_height:', d.get\\('blocks',[{}]\\)[0].get\\('block',{}\\).get\\('header',{}\\).get\\('height'\\) if d.get\\('blocks'\\) else 'N/A'\\); [print\\('block:', b.get\\('block',{}\\).get\\('header',{}\\).get\\('height'\\), 'num_txs:', len\\(b.get\\('block',{}\\).get\\('transactions',[]\\)\\)\\) for b in d.get\\('blocks',[]\\)]\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:len\\(str\\(d[k]\\)\\) if k=='transactions' else d[k] for k in d}, indent=2\\)\\)\")",
       "Bash(python3 -c ':*)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('block_height:', d.get\\('header',{}\\).get\\('metadata',{}\\).get\\('height'\\)\\); print\\('num_txs:', len\\(d.get\\('transactions',[]\\)\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('block_height:', d.get\\('header',{}\\).get\\('metadata',{}\\).get\\('height'\\)\\); print\\('num_txs:', len\\(d.get\\('transactions',[]\\)\\)\\)\")",
+      "Bash(python3 -c \" import sys,json d=json.load\\(sys.stdin\\) txs=d.get\\('transactions',[]\\) for t in txs: print\\('TX keys:', list\\(t.keys\\(\\)\\)\\) tx_inner = t.get\\('transaction', {}\\) print\\('TX inner keys:', list\\(tx_inner.keys\\(\\)\\) if isinstance\\(tx_inner, dict\\) else type\\(tx_inner\\)\\) if isinstance\\(tx_inner, dict\\): print\\(' execution keys:', list\\(tx_inner.get\\('execution', {}\\).keys\\(\\)\\) if 'execution' in tx_inner else 'N/A'\\) print\\(' id:', tx_inner.get\\('id', 'N/A'\\)\\) print\\(' transitions:', len\\(tx_inner.get\\('execution', {}\\).get\\('transitions', []\\)\\)\\) for tr in tx_inner.get\\('execution', {}\\).get\\('transitions', []\\): print\\(' Program:', tr.get\\('program',''\\)\\) print\\(' Function:', tr.get\\('function_name',''\\)\\) if 'zkdrop' in str\\(tr.get\\('program',''\\)\\): print\\(' *** ZKDROP FOUND ***'\\) \")",
+      "Bash(python3 -c \" import sys,json d=json.load\\(sys.stdin\\) print\\('TX type:', d.get\\('type'\\)\\) print\\('TX keys:', list\\(d.keys\\(\\)\\)[:10]\\) tx = d.get\\('transaction', {}\\) print\\('Inner type:', tx.get\\('type'\\) if isinstance\\(tx, dict\\) else 'N/A'\\) if isinstance\\(tx, dict\\): exe = tx.get\\('execution', {}\\) if isinstance\\(exe, dict\\): for tr in exe.get\\('transitions', []\\): prog = tr.get\\('program', ''\\) if 'zkdrop' in prog: print\\('ZKDROP tx found!'\\) print\\('Function:', tr.get\\('function_name'\\)\\) \" echo \"\" echo \"=== Check if zkdrop file_counter has ANY value ===\")",
+      "Bash(python3 -c \" import sys,json d=json.load\\(sys.stdin\\) for t in d.get\\('transactions',[]\\): if t.get\\('status'\\) in ['accepted','rejected']: print\\('TX status:', t.get\\('status'\\)\\) finalize = t.get\\('finalize', []\\) print\\('Finalize entries:', len\\(finalize\\)\\) for f in finalize[:5]: print\\(' ', f\\) \")",
+      "Read(//c/Users/parth/.aleo/leo//**)",
+      "Bash(/c/Users/parth/AppData/Local/Temp/leo.exe build:*)",
+      "Bash(bash deploy.sh \"APrivateKey1zkp5TFncJypeiG4oHxHfxnNFXuBmmwHh88Bey7T47bCXxxv\")",
+      "Bash(/c/Users/parth/AppData/Local/Temp/leo.exe deploy:*)",
+      "Bash(python3 -c \"import sys,json;b=json.load\\(sys.stdin\\);txs=[t['id'] for t in b.get\\('transactions',[]\\)];print\\(f'Block 15761257 txs: {len\\(txs\\)}'\\);[print\\(f'  {tx}'\\) for tx in txs]\")",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ]
   }
 }

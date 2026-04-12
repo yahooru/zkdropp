@@ -13,8 +13,8 @@ export const aleoConfig = {
 
   // Program IDs (update after deployment)
   programs: {
-    // Main ZKDrop contract
-    zkdrop: process.env.NEXT_PUBLIC_ZKDROP_PROGRAM_ID || 'zkdrop_v4_0001.aleo',
+    // Main ZKDrop contract (v4_0002 — optimized for Shield Wallet ZK proof generation)
+    zkdrop: process.env.NEXT_PUBLIC_ZKDROP_PROGRAM_ID || 'zkdrop_v4_0002.aleo',
 
     // ─────────────────────────────────────────────────────────
     // Buildathon Rule 4: Payment Programs
