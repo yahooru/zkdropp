@@ -14,7 +14,7 @@ export function truncate(str: string, length: number): string {
 
 // Generate a unique ID
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 // Copy to clipboard
@@ -33,15 +33,29 @@ export function sleep(ms: number): Promise<void> {
 }
 
 // Debounce function
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
+export function debounce<Args extends unknown[]>(
+  func: (...args: Args) => void,
   wait: number
-): (...args: Parameters<T>) => void {
+): (...args: Args) => void {
   let timeout: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Parameters<T>) => {
+  return (...args: Args) => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   };
+}
+
+// Encode a string into a fixed-length u8 array for Aleo inputs.
+export function toFixedLengthBytes(value: string, length: number): number[] {
+  const encoded = new TextEncoder().encode(value);
+  return Array.from({ length }, (_, index) => encoded[index] ?? 0);
+}
+
+export function toAleoByteArrayLiteral(value: string, length: number): string {
+  return `[${toFixedLengthBytes(value, length).map((byte) => `${byte}u8`).join(', ')}]`;
+}
+
+export function isWalletLocalTransactionId(txId: string): boolean {
+  return txId.startsWith('shield_');
 }
 
 // Check if running in browser
@@ -49,16 +63,16 @@ export const isBrowser = typeof window !== 'undefined';
 
 // Local storage helpers with SSR safety
 export const storage = {
-  get: (key: string, fallback: any = null) => {
+  get<T>(key: string, fallback: T | null = null): T | null {
     if (!isBrowser) return fallback;
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : fallback;
+      return item ? (JSON.parse(item) as T) : fallback;
     } catch {
       return fallback;
     }
   },
-  set: (key: string, value: any) => {
+  set<T>(key: string, value: T) {
     if (!isBrowser) return;
     try {
       localStorage.setItem(key, JSON.stringify(value));

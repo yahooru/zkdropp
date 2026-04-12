@@ -1,26 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import QRCode from 'qrcode';
 import { X, Download, Copy, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { copyToClipboard } from '@/lib/utils';
 
 interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  fileKey: string;    // u64 literal file key (used in URL path)
+  fileKey: string;
   fileName: string;
   ipfsCid?: string;
   mode: 'link' | 'ipfs';
 }
 
+interface QRCodeState {
+  contentUrl: string;
+  dataUrl: string;
+}
+
 export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode }: QRCodeModalProps) {
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [qrState, setQrState] = useState<QRCodeState>({ contentUrl: '', dataUrl: '' });
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const shareUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/file/${fileKey}`
@@ -30,14 +34,10 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
     ? `https://gateway.pinata.cloud/ipfs/${ipfsCid}`
     : shareUrl;
 
-  const displayContent = mode === 'ipfs' && ipfsCid
-    ? `IPFS: ${ipfsCid.slice(0, 20)}...`
-    : `ZKDrop: /file/${fileKey}`;
-
   useEffect(() => {
     if (!isOpen) return;
-    setLoading(true);
-    setCopied(false);
+
+    let cancelled = false;
 
     QRCode.toDataURL(contentUrl, {
       width: 256,
@@ -46,31 +46,43 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
         dark: '#14532d',
         light: '#f0fdf4',
       },
-    }).then((url) => {
-      setQrDataUrl(url);
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
-  }, [isOpen, contentUrl]);
+    })
+      .then((url) => {
+        if (!cancelled) {
+          setQrState({ contentUrl, dataUrl: url });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrState({ contentUrl, dataUrl: '' });
+        }
+      });
 
-  // ESC key to close modal (M8 fix)
+    return () => {
+      cancelled = true;
+    };
+  }, [contentUrl, isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
     };
+
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
+  const loading = qrState.contentUrl !== contentUrl || !qrState.dataUrl;
+
   const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = qrDataUrl;
-    a.download = `zkdrop-qr-${fileKey.replace("0x", "").replace("field", "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}.png`;
-    a.click();
+    const anchor = document.createElement('a');
+    anchor.href = qrState.dataUrl;
+    anchor.download = `zkdrop-qr-${fileKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16)}.png`;
+    anchor.click();
   };
 
   const handleCopy = async () => {
@@ -97,25 +109,26 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
           <h2 className="text-lg font-bold text-green-900">
             {mode === 'ipfs' ? 'IPFS QR Code' : 'Share File Link'}
           </h2>
-          <p className="mt-1 text-sm text-gray-500 truncate max-w-[200px] mx-auto">{fileName}</p>
+          <p className="mx-auto mt-1 max-w-[200px] truncate text-sm text-gray-500">{fileName}</p>
         </div>
 
         <div className="mt-6 flex justify-center">
           {loading ? (
             <div className="h-64 w-64 animate-pulse rounded-xl bg-gray-100" />
           ) : (
-            <img
-              src={qrDataUrl}
-              alt={`QR Code for ${displayContent}`}
+            <Image
+              src={qrState.dataUrl}
+              alt={`QR code for ${contentUrl}`}
               className="rounded-xl border-4 border-green-100"
               width={256}
               height={256}
+              unoptimized
             />
           )}
         </div>
 
         <div className="mt-4 rounded-lg bg-green-50 p-3 text-center">
-          <p className="font-mono text-xs text-green-800 break-all leading-relaxed">
+          <p className="break-all font-mono text-xs leading-relaxed text-green-800">
             {contentUrl.length > 50 ? `${contentUrl.slice(0, 50)}...` : contentUrl}
           </p>
         </div>
@@ -125,7 +138,7 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
             {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? 'Copied!' : 'Copy'}
           </Button>
-          <Button onClick={handleDownload} className="flex-1">
+          <Button onClick={handleDownload} className="flex-1" disabled={loading}>
             <Download className="h-4 w-4" />
             Download
           </Button>
@@ -138,4 +151,3 @@ export function QRCodeModal({ isOpen, onClose, fileKey, fileName, ipfsCid, mode 
     </div>
   );
 }
-

@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 import { useWallet, formatAddress } from '@/lib/wallet';
 import { aleoConfig, fromMicro, toMicro } from '@/lib/aleo';
-import { getFileDetails, hasAccess, sha256AccessKeyField, removeFileByKey, waitForOnChainConfirmation } from '@/lib/zkdrop';
+import { getFileDetails, hasAccess, removeFileByKey } from '@/lib/zkdrop';
 import { getIPFSUrl } from '@/lib/ipfs';
 import { getEncryptionKey, decryptFile } from '@/lib/crypto';
 import type { ZKDropFile } from '@/lib/zkdrop';
@@ -19,7 +19,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Ca
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
-import { copyToClipboard } from '@/lib/utils';
+import { copyToClipboard, toAleoByteArrayLiteral } from '@/lib/utils';
 
 export default function FileDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: fileKey } = use(params);
@@ -59,7 +59,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   const loadFile = useCallback(async () => {
     setLoading(true);
     try {
-      const fileData = await getFileDetails(fileKey);
+      const fileData = await getFileDetails(fileKey, wallet.address ?? undefined);
       setFile(fileData);
 
       if (fileData) {
@@ -146,6 +146,11 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       if (!wallet.isConnected) wallet.connect();
       return;
     }
+    if (file.pending) {
+      setPayStep('error');
+      setPayError('This upload is still pending on-chain confirmation. Please try again after it is confirmed.');
+      return;
+    }
 
     setRequesting(true);
     setPayStep('idle');
@@ -190,17 +195,6 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
       const accessKey = `${accessView.getBigUint64(0).toString()}u64`;
 
       // Build file_name as [u8; 64]
-      const fileNameBytes = [];
-      for (let i = 0; i < 64; i++) {
-        fileNameBytes.push(i < file.name.length ? file.name.charCodeAt(i) : 0);
-      }
-
-      // Build ipfs_hash as [u8; 64] (from CID, padded)
-      const ipfsBytes = [];
-      for (let i = 0; i < 64; i++) {
-        ipfsBytes.push(i < file.cid.length ? file.cid.charCodeAt(i) : 0);
-      }
-
       const unixTs = Math.floor(Date.now() / 1000);
 
       // V2 request_access: (file_key, file_id, ipfs_hash, file_name, access_key, unix_ts)
@@ -210,8 +204,8 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         [
           fileKey,                                     // file_key (u64)
           file.fileId,                                 // file_id (field)
-          `[${ipfsBytes.map(b => `${b}u8`).join(', ')}]`, // ipfs_hash [u8; 64]
-          `[${fileNameBytes.map(b => `${b}u8`).join(', ')}]`, // file_name [u8; 64]
+          toAleoByteArrayLiteral(file.cid, 64),        // ipfs_hash [u8; 64]
+          toAleoByteArrayLiteral(file.name, 64),       // file_name [u8; 64]
           accessKey,                                   // access_key (u64)
           `${unixTs}u64`,                              // unix_ts
         ],
@@ -250,26 +244,16 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     setGrantMsg(null);
     try {
       const recipient = grantAddress.trim();
+      if (file.pending) {
+        throw new Error('This upload is still pending on-chain confirmation.');
+      }
 
       // Compute access_key for the recipient
-      const accessKeyField = await sha256AccessKeyField(file.fileId, recipient);
       const encoder = new TextEncoder();
       const data = encoder.encode(file.fileId + recipient);
       const buf = await crypto.subtle.digest('SHA-256', data);
       const view = new DataView(buf);
       const accessKey = `${view.getBigUint64(0).toString()}u64`;
-
-      // Build file_name as [u8; 64]
-      const fileNameBytes = [];
-      for (let i = 0; i < 64; i++) {
-        fileNameBytes.push(i < file.name.length ? file.name.charCodeAt(i) : 0);
-      }
-
-      // Build ipfs_hash as [u8; 64]
-      const ipfsBytes = [];
-      for (let i = 0; i < 64; i++) {
-        ipfsBytes.push(i < file.cid.length ? file.cid.charCodeAt(i) : 0);
-      }
 
       const unixTs = Math.floor(Date.now() / 1000);
 
@@ -280,8 +264,8 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         [
           fileKey,
           file.fileId,
-          `[${ipfsBytes.map(b => `${b}u8`).join(', ')}]`,
-          `[${fileNameBytes.map(b => `${b}u8`).join(', ')}]`,
+          toAleoByteArrayLiteral(file.cid, 64),
+          toAleoByteArrayLiteral(file.name, 64),
           accessKey,
           `${unixTs}u64`,
         ],
@@ -314,9 +298,11 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
     setRevokeMsg(null);
     try {
       const user = revokeAddress.trim();
+      if (file.pending) {
+        throw new Error('This upload is still pending on-chain confirmation.');
+      }
 
       // Compute access_key for the user
-      const accessKeyField = await sha256AccessKeyField(file.fileId, user);
       const encoder = new TextEncoder();
       const data = encoder.encode(file.fileId + user);
       const buf = await crypto.subtle.digest('SHA-256', data);
@@ -357,6 +343,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   // ─────────────────────────────────────────────────────────────────
   const handleUpdatePrice = async () => {
     if (!wallet.isConnected || !file) return;
+    if (file.pending) {
+      setPriceMsg({ type: 'error', text: 'Wait for on-chain confirmation before updating the price.' });
+      return;
+    }
     const priceNum = parseFloat(newPrice);
     if (isNaN(priceNum) || priceNum < 0) {
       setPriceMsg({ type: 'error', text: 'Invalid price.' });
@@ -400,6 +390,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   // ─────────────────────────────────────────────────────────────────
   const handleUpdateName = async () => {
     if (!wallet.isConnected || !file || !newName.trim()) return;
+    if (file.pending) {
+      setNameMsg({ type: 'error', text: 'Wait for on-chain confirmation before renaming the file.' });
+      return;
+    }
     setNameLoading(true);
     setNameMsg(null);
     try {
@@ -410,17 +404,11 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
         return;
       }
 
-      // Build name as [u8; 64]
-      const nameBytes = [];
-      for (let i = 0; i < 64; i++) {
-        nameBytes.push(i < newName.length ? newName.charCodeAt(i) : 0);
-      }
-
       // V2 update_name: (file_key, file_id, new_name, file_record)
       const result = await wallet.execute(
         aleoConfig.programs.zkdrop,
         'update_name',
-        [fileKey, file.fileId, `[${nameBytes.map(b => `${b}u8`).join(', ')}]`, fileRecordCipher],
+        [fileKey, file.fileId, toAleoByteArrayLiteral(newName, 64), fileRecordCipher],
         2.0
       );
       if (result.txId) {
@@ -443,6 +431,10 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   // ─────────────────────────────────────────────────────────────────
   const handleDeleteFile = async () => {
     if (!wallet.isConnected || !file) return;
+    if (file.pending) {
+      setDeleteMsg({ type: 'error', text: 'This upload has not been confirmed on-chain yet.' });
+      return;
+    }
     setDeleteLoading(true);
     setDeleteMsg(null);
     try {
@@ -539,7 +531,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isOwner = wallet.address?.toLowerCase() === file.owner?.toLowerCase();
-  const isDeleted = Number(file.price) === 0 && file.accessCount === BigInt(0);
+  const isDeleted = !file.pending && Number(file.price) === 0 && file.accessCount === BigInt(0);
 
   return (
     <div className="min-h-[80vh] py-12">
@@ -576,6 +568,9 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                     <h1 className="text-xl font-bold text-green-900">{file.name}</h1>
                     {isDeleted && (
                       <Badge variant="default">Deleted</Badge>
+                    )}
+                    {file.pending && (
+                      <Badge variant="default">Pending Confirmation</Badge>
                     )}
                     {!isDeleted && (
                       <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'}>
@@ -629,6 +624,12 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                   <CardTitle>Actions</CardTitle>
                 </CardHeader>
                 <div className="space-y-3">
+                  {file.pending && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>Waiting for Aleo confirmation. Owner actions will unlock after the upload appears on-chain.</span>
+                    </div>
+                  )}
                   {hasAccess_ || isOwner ? (
                     <>
                       <Button onClick={handleDownload} isLoading={downloading} size="lg" className="w-full">
@@ -642,6 +643,11 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                         </div>
                       )}
                     </>
+                  ) : file.pending ? (
+                    <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>Access requests are disabled until this file is confirmed on-chain.</span>
+                    </div>
                   ) : (
                     <>
                       <Button
@@ -737,7 +743,9 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Status</span>
-                  <span className="text-green-900">{isDeleted ? 'Deleted' : 'Active'}</span>
+                  <span className="text-green-900">
+                    {file.pending ? 'Pending confirmation' : isDeleted ? 'Deleted' : 'Active'}
+                  </span>
                 </div>
               </div>
             </Card>
@@ -795,7 +803,7 @@ export default function FileDetailPage({ params }: { params: Promise<{ id: strin
             </Card>
 
             {/* Owner actions */}
-            {isOwner && !isDeleted && (
+            {isOwner && !isDeleted && !file.pending && (
               <div className="space-y-4">
                 {/* Grant Access */}
                 <Card>

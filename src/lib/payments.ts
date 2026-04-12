@@ -8,6 +8,11 @@
 
 import { aleoConfig } from './aleo';
 
+interface AleoPaymentTransactionLike {
+  block_height?: number;
+  type?: string;
+}
+
 /**
  * Check public balance via AleoNetworkClient.
  * Works without a wallet connection.
@@ -38,13 +43,13 @@ export async function getTransactionStatus(txId: string): Promise<{
   try {
     const { AleoNetworkClient } = await import('@provablehq/sdk');
     const networkClient = new AleoNetworkClient(aleoConfig.rpcUrl);
-    const tx = await networkClient.getTransaction(txId);
+    const tx = await networkClient.getTransaction(txId) as AleoPaymentTransactionLike | null;
     return {
       status: 'confirmed',
-      type: (tx as any)?.type || 'unknown',
-      blockHeight: (tx as any)?.block_height,
+      type: tx?.type || 'unknown',
+      blockHeight: tx?.block_height,
     };
-  } catch (error) {
+  } catch {
     return { status: 'failed', type: 'unknown' };
   }
 }
@@ -88,7 +93,7 @@ export async function getLatestBlockHeight(): Promise<number> {
     const { AleoNetworkClient } = await import('@provablehq/sdk');
     const networkClient = new AleoNetworkClient(aleoConfig.rpcUrl);
     return await networkClient.getLatestHeight();
-  } catch (error) {
+  } catch {
     return 0;
   }
 }

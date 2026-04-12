@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Search, FileText, Lock, Eye, CreditCard } from 'lucide-react';
+import { Search, FileText, Lock, Eye } from 'lucide-react';
 import { useWallet, formatAddress } from '@/lib/wallet';
-import { aleoConfig, fromMicro } from '@/lib/aleo';
+import { fromMicro } from '@/lib/aleo';
 import { getTotalFileCount, getFilesByIds, getRegistry } from '@/lib/zkdrop';
 import type { ZKDropFile } from '@/lib/zkdrop';
 import { Card } from '@/components/ui/Card';
@@ -32,8 +32,13 @@ export default function FilesPage() {
         const registry = getRegistry();
         const ids = registry.map((e) => e.fileKey);
         if (ids.length > 0) {
-          const onChainFiles = await getFilesByIds(ids);
-          setFiles(onChainFiles);
+          const knownFiles = await getFilesByIds(ids, wallet.address ?? undefined);
+          const currentAddress = wallet.address?.toLowerCase();
+          const visibleFiles = knownFiles.filter((file) => {
+            if (!file.pending) return true;
+            return Boolean(currentAddress && file.owner.toLowerCase() === currentAddress);
+          });
+          setFiles(visibleFiles);
         } else {
           setFiles([]);
         }
@@ -54,7 +59,7 @@ export default function FilesPage() {
     };
 
     loadFiles();
-  }, []);
+  }, [wallet.address]);
 
   const filteredFiles = files.filter((file) => {
     const matchesSearch = file.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -133,6 +138,12 @@ export default function FilesPage() {
             <Lock className="h-3 w-3" />
             All access lists are private
           </span>
+          {filteredFiles.some((file) => file.pending) && (
+            <>
+              <span className="h-4 w-px bg-gray-200" />
+              <span>Pending uploads stay private until confirmed</span>
+            </>
+          )}
           <span className="h-4 w-px bg-gray-200" />
           <span className="flex items-center gap-1">
             <Eye className="h-3 w-3" />
@@ -185,7 +196,11 @@ export default function FilesPage() {
                         <FileText className="h-6 w-6 text-green-600" />
                       </div>
                       <Badge variant={Number(fromMicro(file.price)) === 0 ? 'success' : 'warning'} size="sm">
-                        {Number(fromMicro(file.price)) === 0 ? 'Free' : `${fromMicro(file.price)} Credits`}
+                        {file.pending
+                          ? 'Pending'
+                          : Number(fromMicro(file.price)) === 0
+                            ? 'Free'
+                            : `${fromMicro(file.price)} Credits`}
                       </Badge>
                     </div>
                     <h3 className="font-semibold text-green-900 truncate">{file.name}</h3>

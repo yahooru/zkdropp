@@ -1,7 +1,33 @@
 // ZKDrop service layer — real on-chain queries via @provablehq/sdk
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { aleoConfig } from './aleo';
+import { aleoConfig, toMicro } from './aleo';
+import { isWalletLocalTransactionId } from './utils';
+
+interface AleoTransitionLike {
+  function_name?: string;
+  inputs?: string[];
+  outputs?: string[];
+  program?: string;
+}
+
+interface AleoTransactionLike {
+  block_height?: number;
+  block_timestamp?: number;
+  id?: string;
+  status?: string;
+  transaction_id?: string;
+  transitions?: AleoTransitionLike[];
+  type?: string;
+}
+
+interface AleoBlockLike {
+  transactions?: AleoTransactionLike[];
+}
+
+interface AleoClientWithBlock {
+  getBlock?: (height: number) => Promise<AleoBlockLike | undefined>;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -19,6 +45,7 @@ export interface ZKDropFile {
   blockHeight: number;   // block height at creation (from contract file_created_at mapping)
   txId: string;          // upload transaction ID
   encrypted: boolean;    // true if AES-256-GCM encrypted before upload
+  pending: boolean;      // true when the file exists only in local registry
 }
 
 export interface ZKDropTransaction {
@@ -42,9 +69,11 @@ export interface FileRegistryEntry {
   cid: string;
   name: string;
   price: string;     // stored as string for JSON serialization
+  priceUnit?: 'credits' | 'micro';
   createdAt: number; // unix timestamp in seconds
   txId: string;
   encrypted: boolean;
+  ownerAddress?: string;
 }
 
 export function getRegistry(): FileRegistryEntry[] {
@@ -80,9 +109,13 @@ export function saveToRegistry(entry: FileRegistryEntry): void {
     console.debug(`[ZKDrop] saveToRegistry: updated existing entry for fileId=${entry.fileId}`);
   } else {
     registry.push(entry);
-    console.debug(`[ZKDrop] saveToRegistry: added new entry, total=${registry.length + 1}`);
+    console.debug(`[ZKDrop] saveToRegistry: added new entry, total=${registry.length}`);
   }
   saveRegistry(registry);
+}
+
+export function getRegistryEntryByFileKey(fileKey: string): FileRegistryEntry | null {
+  return getRegistry().find((entry) => entry.fileKey === fileKey) ?? null;
 }
 
 export function removeFromRegistry(fileId: string): void {
@@ -366,7 +399,7 @@ export async function getTransaction(txId: string): Promise<{
 } | null> {
   try {
     const client = await getNetworkClient();
-    const tx = await client.getTransaction(txId) as any;
+    const tx = await client.getTransaction(txId) as AleoTransactionLike | null;
     if (!tx) return null;
     return {
       type: tx.type || 'unknown',
@@ -379,26 +412,144 @@ export async function getTransaction(txId: string): Promise<{
 }
 
 /**
- * Wait for a file to appear on-chain by polling fileExists.
- * Retries every 3s for up to maxRetries (default: 20 = ~60s).
- * Returns true if confirmed on-chain, false if timeout.
+ * Wait for a file to appear on-chain by polling fileExists AND tx status.
+ *
+ * Two polling strategies:
+ * 1. If checkWalletTxStatus is provided (wallet hook): poll the wallet adapter's
+ *    transactionStatus. When it returns 'accepted', we get the real 'at1...' ID
+ *    and verify via getTransaction + fileExists.
+ *    When it returns 'rejected'/'failed', we return early with rejection reason.
+ * 2. Fallback: just poll fileExists every 3s.
+ *
+ * Returns { confirmed: true } if file is on-chain.
+ * Returns { confirmed: false, rejected: true, reason: string } if tx was rejected.
+ * Returns { confirmed: false, rejected: false } if timeout (tx never reached chain).
  */
 export async function waitForOnChainConfirmation(
   fileKey: string,
-  maxRetries: number = 20
-): Promise<boolean> {
-  console.debug(`[ZKDrop] Waiting for on-chain confirmation for fileKey=${fileKey}`);
+  maxRetries: number = 20,
+  txId?: string,
+  checkWalletTxStatus?: (txId: string) => Promise<{ status: string; transactionId?: string; error?: string }>
+): Promise<{ confirmed: boolean; rejected?: boolean; reason?: string }> {
+  console.debug(`[ZKDrop] Waiting for on-chain confirmation for fileKey=${fileKey}, txId=${txId ?? 'unknown'}, hasWalletCheck=${!!checkWalletTxStatus}`);
+
   for (let i = 0; i < maxRetries; i++) {
     await new Promise(r => setTimeout(r, 3000));
+
+    // Strategy 1: Poll the wallet adapter for transaction status
+    // This is the ONLY way to resolve shield_ IDs to real at1... IDs
+    if (txId && checkWalletTxStatus) {
+      try {
+        const walletResult = await checkWalletTxStatus(txId);
+        console.debug(`[ZKDrop] Wallet tx status: ${walletResult.status}, realId=${walletResult.transactionId ?? 'n/a'}, attempt ${i + 1}/${maxRetries}`);
+
+        if (walletResult.status === 'accepted' || walletResult.status === 'confirmed') {
+          // Tx is on-chain! Get the real at1... ID and verify via getTransaction + fileExists
+          const realTxId = walletResult.transactionId ?? txId;
+          try {
+            const { AleoNetworkClient } = await import('@provablehq/sdk');
+            const client = new AleoNetworkClient(aleoConfig.rpcUrl);
+            const tx = await client.getTransaction(realTxId) as AleoTransactionLike;
+            console.debug(`[ZKDrop] On-chain tx found: ${realTxId}, type=${tx?.type}`);
+            const exists = await fileExists(fileKey);
+            if (exists) {
+              console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
+              return { confirmed: true };
+            }
+            // Tx on-chain but file_owners not set → REJECTED
+            const txType = tx?.type ?? 'unknown';
+            console.warn(`[ZKDrop] Transaction on-chain but REJECTED (file_owners not set): type=${txType}`);
+            return {
+              confirmed: false,
+              rejected: true,
+              reason: `Contract execution rejected on-chain — the finalize block did not update file_owners. Check contract inputs.`,
+            };
+          } catch (err) {
+            const msg = String(err);
+            if (!msg.includes('404') && !msg.includes('Not Found') && !msg.includes('not found')) {
+              console.warn(`[ZKDrop] getTransaction error after wallet accepted:`, msg);
+            }
+            // Tx accepted by wallet but not yet visible on RPC — keep polling
+          }
+        } else if (walletResult.status === 'rejected' || walletResult.status === 'failed') {
+          console.warn(`[ZKDrop] Transaction ${walletResult.status} by wallet:`, walletResult.error);
+          return {
+            confirmed: false,
+            rejected: true,
+            reason: walletResult.error ?? `Transaction was ${walletResult.status} by the network.`,
+          };
+        }
+        // 'pending' — wallet hasn't processed yet, keep polling
+      } catch (err) {
+        const msg = String(err);
+        // Only warn for unexpected errors, not normal "not found" during pending state
+        if (!msg.includes('not found') && !msg.includes('Not Found') && !msg.includes('pending')) {
+          console.warn(`[ZKDrop] checkWalletTxStatus error (attempt ${i + 1}/${maxRetries}):`, msg);
+        }
+      }
+    }
+
+    // Strategy 2: If we already have a real on-chain txId, verify directly via RPC
+    if (txId && !isWalletLocalTransactionId(txId)) {
+      try {
+        const { AleoNetworkClient } = await import('@provablehq/sdk');
+        const client = new AleoNetworkClient(aleoConfig.rpcUrl);
+        const tx = await client.getTransaction(txId) as AleoTransactionLike;
+        console.debug(`[ZKDrop] Tx ${txId} found on-chain (type=${tx?.type}), attempt ${i + 1}/${maxRetries}`);
+        const exists = await fileExists(fileKey);
+        if (exists) {
+          console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
+          return { confirmed: true };
+        }
+        const txType = tx?.type ?? 'unknown';
+        console.warn(`[ZKDrop] Transaction REJECTED: on-chain but file_owners not set. type=${txType}`);
+        return {
+          confirmed: false,
+          rejected: true,
+          reason: `Contract execution rejected on-chain.`,
+        };
+      } catch {
+        // 404 — not in a block yet, keep polling
+      }
+    }
+
+    // Strategy 3: Direct fileExists check (works for both pending and any tx ID)
     const exists = await fileExists(fileKey);
     console.debug(`[ZKDrop] Attempt ${i + 1}/${maxRetries}: fileKey=${fileKey}, exists=${exists}`);
     if (exists) {
       console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}`);
-      return true;
+      return { confirmed: true };
     }
   }
   console.warn(`[ZKDrop] On-chain confirmation timed out for fileKey=${fileKey} after ${maxRetries} attempts`);
-  return false;
+  return { confirmed: false, rejected: false };
+}
+
+function registryEntryToPendingFile(
+  entry: FileRegistryEntry,
+  fallbackOwner?: string
+): ZKDropFile {
+  const decimalPrice = Number(entry.price);
+  const parsedPrice =
+    entry.priceUnit === 'micro'
+      ? BigInt(entry.price || '0')
+      : Number.isFinite(decimalPrice)
+        ? toMicro(decimalPrice)
+        : BigInt(0);
+  return {
+    fileId: entry.fileId,
+    fileKey: entry.fileKey,
+    cid: entry.cid,
+    name: entry.name,
+    price: parsedPrice,
+    accessCount: BigInt(0),
+    owner: entry.ownerAddress || fallbackOwner || '',
+    createdAt: entry.createdAt,
+    blockHeight: 0,
+    txId: entry.txId,
+    encrypted: entry.encrypted ?? false,
+    pending: true,
+  };
 }
 
 /**
@@ -422,23 +573,20 @@ export async function getAddressTransactions(
       if (blockHeight < 0) break;
 
       try {
-        const block = await (client as any).getBlock(blockHeight);
+        const block = await (client as AleoClientWithBlock).getBlock?.(blockHeight);
         if (!block?.transactions) continue;
 
-        for (const tx of block.transactions) {
+        for (const txObj of block.transactions) {
           // Check if this tx's transitions involve our address
-          const txObj = tx as any;
           const transitions = txObj.transitions || [];
 
           let involvesAddress = false;
-          let program = '';
           let func = '';
 
-          for (const t of transitions) {
-            const tObj = t as any;
+          for (const transition of transitions) {
+            const tObj = transition;
             if (tObj.program === aleoConfig.programs.zkdrop) {
               involvesAddress = true;
-              program = tObj.program || '';
               func = tObj.function_name || '';
               break;
             }
@@ -499,56 +647,64 @@ export async function getUserFiles(address: string): Promise<ZKDropFile[]> {
     return [];
   }
 
-  const files: ZKDropFile[] = [];
   const addressLower = address?.toLowerCase();
+  const files = await Promise.all(
+    registry.map(async (entry) => {
+      const [owner, price, accessCount, blockHeight, unixTs, chainName] = await Promise.all([
+        getFileOwner(entry.fileKey),
+        getFilePrice(entry.fileKey),
+        getFileAccessCount(entry.fileKey),
+        getFileCreatedAt(entry.fileKey),
+        getFileUnixTs(entry.fileKey),
+        getFileName(entry.fileKey),
+      ]);
 
-  for (const entry of registry) {
-    const [owner, price, accessCount, blockHeight, unixTs, chainName] = await Promise.all([
-      getFileOwner(entry.fileKey),
-      getFilePrice(entry.fileKey),
-      getFileAccessCount(entry.fileKey),
-      getFileCreatedAt(entry.fileKey),
-      getFileUnixTs(entry.fileKey),
-      getFileName(entry.fileKey),
-    ]);
+      const ownerLower = owner?.toLowerCase();
+      const pendingOwnerLower = entry.ownerAddress?.toLowerCase();
+      const isPending = !owner;
+      const isOwned = Boolean(ownerLower && addressLower && ownerLower === addressLower);
+      const isPendingForThisAddress = Boolean(
+        isPending && addressLower && (!pendingOwnerLower || pendingOwnerLower === addressLower)
+      );
 
-    const ownerLower = owner?.toLowerCase();
-    const isPending = !owner; // No owner on-chain = pending confirmation
+      if (!isOwned && !isPendingForThisAddress) {
+        return null;
+      }
 
-    // Include files owned by this address OR files pending on-chain for this address
-    const isOwned = ownerLower && addressLower && ownerLower === addressLower;
-    const isPendingForThisAddress = isPending; // Registry entry exists for this user
+      if (isPending) {
+        return registryEntryToPendingFile(entry, address);
+      }
 
-    if (isOwned || isPendingForThisAddress) {
-      files.push({
+      return {
         fileId: entry.fileId,
         fileKey: entry.fileKey,
         cid: entry.cid,
-        // Prefer chain name if registry name is empty/missing
         name: chainName !== 'Unknown File' ? chainName : entry.name,
         price: price ?? BigInt(0),
         accessCount: accessCount ?? BigInt(0),
-        owner: owner ?? address, // Show user's address for pending files
-        // Use unix timestamp from chain if available, fallback to registry
+        owner: owner ?? address,
         createdAt: unixTs > 0 ? unixTs : entry.createdAt,
         blockHeight: blockHeight ?? 0,
         txId: entry.txId,
         encrypted: entry.encrypted ?? false,
-      });
-    }
-  }
+        pending: false,
+      } satisfies ZKDropFile;
+    })
+  );
 
-  return files.sort((a, b) => b.createdAt - a.createdAt);
+  return files
+    .filter((file): file is ZKDropFile => file !== null)
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /**
  * Get multiple file details at once (for browse page).
  * @param fileKeys - array of u64 literal strings (NOT field literals)
  */
-export async function getFilesByIds(fileKeys: string[]): Promise<ZKDropFile[]> {
+export async function getFilesByIds(fileKeys: string[], fallbackOwner?: string): Promise<ZKDropFile[]> {
   if (!fileKeys.length) return [];
   const results = await Promise.all(
-    fileKeys.map(key => getFileDetails(key))
+    fileKeys.map((key) => getFileDetails(key, fallbackOwner))
   );
   const filtered = results.filter((f): f is ZKDropFile => f !== null);
   console.debug(`[ZKDrop] getFilesByIds: queried=${fileKeys.length}, found=${filtered.length}`);
@@ -559,7 +715,7 @@ export async function getFilesByIds(fileKeys: string[]): Promise<ZKDropFile[]> {
  * Get file details by fileKey (u64 mapping key).
  * Uses both on-chain data (timestamps, names, prices) and local registry (cid, txId).
  */
-export async function getFileDetails(fileKey: string): Promise<ZKDropFile | null> {
+export async function getFileDetails(fileKey: string, fallbackOwner?: string): Promise<ZKDropFile | null> {
   const [owner, price, accessCount, blockHeight, unixTs, chainName] = await Promise.all([
     getFileOwner(fileKey),
     getFilePrice(fileKey),
@@ -569,13 +725,16 @@ export async function getFileDetails(fileKey: string): Promise<ZKDropFile | null
     getFileName(fileKey),
   ]);
 
-  if (!owner) {
-    console.debug(`[ZKDrop] getFileDetails: no owner found for fileKey=${fileKey}`);
-    return null;
-  }
+  const local = getRegistryEntryByFileKey(fileKey);
 
-  const registry = getRegistry();
-  const local = registry.find(e => e.fileKey === fileKey);
+  if (!owner) {
+    if (!local) {
+      console.debug(`[ZKDrop] getFileDetails: no owner found for fileKey=${fileKey}`);
+      return null;
+    }
+
+    return registryEntryToPendingFile(local, fallbackOwner);
+  }
 
   return {
     fileId: local?.fileId || `0x${fileKey.replace('u64', '')}${'0'.repeat(64)}field`,
@@ -591,6 +750,7 @@ export async function getFileDetails(fileKey: string): Promise<ZKDropFile | null
     blockHeight,
     txId: local?.txId || '',
     encrypted: local?.encrypted ?? false,
+    pending: false,
   };
 }
 
@@ -606,6 +766,7 @@ export function registerFile(params: {
   fileKey?: string;
   encrypted?: boolean;
   unixTs?: number;
+  ownerAddress?: string;
 }): void {
   const fileId = params.fileId ?? '';
   const fileKey = params.fileKey ?? '';
@@ -615,10 +776,12 @@ export function registerFile(params: {
     fileKey,
     cid: params.cid,
     name: params.name,
-    price: params.price.toString(),
+    price: toMicro(params.price).toString(),
+    priceUnit: 'micro',
     createdAt: params.unixTs ?? Math.floor(Date.now() / 1000),
     txId: params.txId,
     encrypted: params.encrypted ?? false,
+    ownerAddress: params.ownerAddress,
   });
 }
 
@@ -738,18 +901,16 @@ export async function getCreditsTransactions(
       if (blockHeight < 0) break;
 
       try {
-        const block = await (client as any).getBlock(blockHeight);
+        const block = await (client as AleoClientWithBlock).getBlock?.(blockHeight);
         if (!block?.transactions) continue;
 
-        for (const tx of block.transactions) {
-          const txObj = tx as any;
+        for (const txObj of block.transactions) {
           const transitions = txObj.transitions || [];
 
           let involvesAddress = false;
           let func = '';
 
-          for (const t of transitions) {
-            const tObj = t as any;
+          for (const tObj of transitions) {
             // Check credits.aleo program and transitions that might involve this address
             if (tObj.program === aleoConfig.programs.credits) {
               // Check inputs/outputs for this address

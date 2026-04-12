@@ -24,7 +24,6 @@ interface OnChainTransaction {
 export default function PaymentsPage() {
   const wallet = useWallet();
   const [loading, setLoading] = useState(true);
-  const [txLoading, setTxLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'credits' | 'usad'>('credits');
   const [balance, setBalance] = useState({ credits: BigInt(0), usad: BigInt(0) });
   const [transactions, setTransactions] = useState<OnChainTransaction[]>([]);
@@ -382,7 +381,7 @@ export default function PaymentsPage() {
                 </CardDescription>
               </CardHeader>
               <div className="space-y-3">
-                {txLoading || loading ? (
+                {loading ? (
                   <div className="space-y-3">
                     {[1, 2, 3].map((i) => (
                       <div key={i} className="h-14 bg-gray-50 rounded-lg animate-pulse" />

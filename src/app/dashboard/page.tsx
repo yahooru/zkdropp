@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, FileText, Download, Share2, Lock, Eye, Trash2, Copy, CheckCircle2, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, FileText, Download, Share2, Eye, Trash2, Copy, CheckCircle2, ExternalLink } from 'lucide-react';
 import { useWallet } from '@/lib/wallet';
-import { aleoConfig, fromMicro } from '@/lib/aleo';
-import { getUserFiles, getAddressTransactions, getBalances, removeFile, removeFileByKey } from '@/lib/zkdrop';
+import { fromMicro } from '@/lib/aleo';
+import { getUserFiles, getAddressTransactions, getBalances, removeFileByKey } from '@/lib/zkdrop';
 import type { ZKDropFile, ZKDropTransaction } from '@/lib/zkdrop';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -93,10 +93,13 @@ export default function DashboardPage() {
           <p className="mt-1 text-gray-600">
             Manage your uploaded files and track on-chain activity.
           </p>
+          <p className="mt-2 text-sm text-green-700">
+            Wallet balance: {fromMicro(balance).toFixed(2)} Credits
+          </p>
         </motion.div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Total Files', value: loading ? '—' : totalFiles.toString(), icon: FileText, color: 'text-green-600' },
             { label: 'Total Downloads', value: loading ? '—' : totalDownloads.toString(), icon: Download, color: 'text-emerald-600' },
@@ -185,6 +188,11 @@ export default function DashboardPage() {
                           {file.encrypted && (
                             <Badge variant="info" size="sm">
                               🔒 Encrypted
+                            </Badge>
+                          )}
+                          {file.pending && (
+                            <Badge variant="default" size="sm">
+                              Pending
                             </Badge>
                           )}
                           <span className="text-xs text-gray-400">

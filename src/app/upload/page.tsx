@@ -1,19 +1,30 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Upload, FileText, X, CheckCircle2, AlertCircle, Lock, Shield, Coins, KeyRound } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Coins,
+  FileText,
+  KeyRound,
+  Lock,
+  RefreshCw,
+  Shield,
+  Upload,
+  X,
+} from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { useWallet } from '@/lib/wallet';
 import { aleoConfig, toMicro } from '@/lib/aleo';
-import { registerFile } from '@/lib/zkdrop';
-// FileRecord ciphertext will be retrieved from wallet via transaction history after upload.
 import { encryptFileForUpload, storeEncryptionKey } from '@/lib/crypto';
+import { registerFile, waitForOnChainConfirmation } from '@/lib/zkdrop';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { isWalletLocalTransactionId, toAleoByteArrayLiteral, toFixedLengthBytes } from '@/lib/utils';
 
 type UploadStep = 'idle' | 'uploading' | 'ipfs' | 'blockchain' | 'success' | 'error';
 
@@ -24,200 +35,195 @@ interface UploadState {
   txId: string | null;
   error: string | null;
   fileId: string | null;
+  fileKey: string | null;
+  confirmationStatus: 'pending' | 'confirmed' | null;
 }
+
+const INITIAL_STATE: UploadState = {
+  step: 'idle',
+  file: null,
+  ipfsCid: null,
+  txId: null,
+  error: null,
+  fileId: null,
+  fileKey: null,
+  confirmationStatus: null,
+};
 
 export default function UploadPage() {
   const router = useRouter();
   const wallet = useWallet();
-
-  const [state, setState] = useState<UploadState>({
-    step: 'idle',
-    file: null,
-    ipfsCid: null,
-    txId: null,
-    error: null,
-    fileId: null,
-  });
-
+  const [state, setState] = useState<UploadState>(INITIAL_STATE);
   const [price, setPrice] = useState('');
-  const [fileName, setFileName] = useState('');
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setState((s) => ({ ...s, file, step: 'uploading' }));
-      setFileName(file.name);
-    }
+    const file = acceptedFiles[0];
+    if (!file) return;
+    setState((current) => ({ ...current, file, step: 'uploading', error: null }));
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { '*': [] },
     maxFiles: 1,
     maxSize: 100 * 1024 * 1024,
   });
 
-  const handleUpload = async () => {
+  const reset = useCallback(() => {
+    setState(INITIAL_STATE);
+    setPrice('');
+    setCheckingStatus(false);
+  }, []);
+
+  const handleCheckStatus = useCallback(async () => {
+    if (!state.fileKey || !state.txId) return;
+    setCheckingStatus(true);
+    try {
+      const result = await waitForOnChainConfirmation(
+        state.fileKey,
+        20,
+        state.txId ?? undefined,
+        wallet.checkTransactionStatus
+      );
+      if (result.confirmed) {
+        setState((current) => ({ ...current, confirmationStatus: 'confirmed' }));
+      }
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, [state.fileKey, state.txId, wallet.checkTransactionStatus]);
+
+  const handleUpload = useCallback(async () => {
     if (!state.file || !wallet.address) return;
 
-    setState((s) => ({ ...s, step: 'ipfs', error: null }));
+    setState((current) => ({ ...current, step: 'ipfs', error: null }));
 
     try {
-      // Step 1: Encrypt the file with AES-256-GCM before upload (SEC-2: true E2E privacy)
-      setState((s) => ({ ...s, step: 'ipfs', error: null }));
+      const parsedPrice = parseFloat(price);
+      const normalizedPrice = Number.isFinite(parsedPrice) ? parsedPrice : 0;
+      if (normalizedPrice < 0) {
+        throw new Error('Price cannot be negative.');
+      }
+
       const { encryptedBlob, keyBase64, ivBase64 } = await encryptFileForUpload(state.file);
 
-      // Step 2: Upload encrypted blob to IPFS via server-side API route (C4 fix: JWT stays server-side)
       const formData = new FormData();
       const encryptedFile = new File([encryptedBlob], `${state.file.name}.enc`, {
         type: 'application/octet-stream',
       });
       formData.append('file', encryptedFile);
       formData.append('name', `${state.file.name} (encrypted)`);
-      const ipfsRes = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!ipfsRes.ok) {
-        const err = await ipfsRes.json().catch(() => ({ error: ipfsRes.statusText }));
-        throw new Error(err.error || 'IPFS upload failed');
-      }
-      const { IpfsHash: cid } = await ipfsRes.json();
-      setState((s) => ({ ...s, ipfsCid: cid, step: 'blockchain' }));
 
-      // Step 2: Execute Aleo contract
-      const nameBytes = nameToBytes(state.file.name);
-      const priceMicro = toMicro(parseFloat(price) || 0);
-
-      // Build IPFS bytes as [u8; 64] — pad or truncate CID to 64 bytes
-      const paddedCid: string = cid.padEnd(64, '\0');
-      const ipfsBytes: number[] = [];
-      for (let i = 0; i < 64; i++) {
-        ipfsBytes.push(i < paddedCid.length ? paddedCid.charCodeAt(i) : 0);
+      const ipfsResponse = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!ipfsResponse.ok) {
+        const errorBody = await ipfsResponse.json().catch(() => ({ error: ipfsResponse.statusText }));
+        throw new Error(errorBody.error || 'IPFS upload failed');
       }
 
-      // Compute both the field file_id and u64 file_key for Aleo RPC compatibility.
-      // file_id    = sha256(ipfs_bytes) as Aleo field literal (0x...field) — for contract inputs.
-      // file_key   = sha256(ipfs_bytes)[0..8] as u64 literal — for Aleo RPC URL API.
-      const ipfsHashBytes = new Uint8Array(ipfsBytes);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', ipfsHashBytes);
+      const { IpfsHash: cid } = (await ipfsResponse.json()) as { IpfsHash: string };
+      setState((current) => ({ ...current, ipfsCid: cid, step: 'blockchain' }));
+
+      const ipfsBytes = toFixedLengthBytes(cid, 64);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', new Uint8Array(ipfsBytes));
       const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
       const fileId = `0x${hashHex}field`;
-      const view = new DataView(hashBuffer);
-      const fileKey = `${view.getBigUint64(0).toString()}u64`;
-
-      // Unix timestamp for human-readable dates (stored in contract and registry)
+      const fileKey = `${new DataView(hashBuffer).getBigUint64(0).toString()}u64`;
       const unixTs = Math.floor(Date.now() / 1000);
+      const priceMicro = toMicro(normalizedPrice);
 
-      // Build inputs for upload_file (6 params: name, ipfs_hash, price, file_key, file_id, unix_ts)
       const inputs = [
-        `[${nameBytes.map(b => `${b}u8`).join(', ')}]`,
-        `[${ipfsBytes.map(b => `${b}u8`).join(', ')}]`,
+        toAleoByteArrayLiteral(state.file.name, 64),
+        toAleoByteArrayLiteral(cid, 64),
         `${priceMicro.toString()}u64`,
         fileKey,
         fileId,
         `${unixTs}u64`,
       ];
-      console.debug(`[ZKDrop] Executing upload_file with inputs:`, inputs);
-      console.debug(`[ZKDrop] program=${aleoConfig.programs.zkdrop}, function=upload_file, fileKey=${fileKey}, fileId=${fileId}`);
 
-      const result = await wallet.execute(
-        aleoConfig.programs.zkdrop,
-        'upload_file',
-        inputs,
-        2.0
+      console.debug('[ZKDrop] Executing upload_file with inputs:', inputs);
+      console.debug(
+        `[ZKDrop] program=${aleoConfig.programs.zkdrop}, function=upload_file, fileKey=${fileKey}, fileId=${fileId}`
       );
 
-      console.debug(`[ZKDrop] Upload result:`, result);
-      if (result.txId) {
-        // Store encryption key in localStorage
-        storeEncryptionKey(fileId, { key: keyBase64, iv: ivBase64, originalName: state.file.name });
+      const result = await wallet.execute(aleoConfig.programs.zkdrop, 'upload_file', inputs, 2.0);
+      console.debug('[ZKDrop] Upload result: txId=', result.txId, 'error=', result.error);
 
-        // Register file in local registry immediately (so it shows as pending)
-        console.debug(`[ZKDrop] Upload success: registering fileId=${fileId}, fileKey=${fileKey}, cid=${cid}`);
-        registerFile({
-          fileId,
-          fileKey,
-          cid,
-          name: state.file.name,
-          price: parseFloat(price) || 0,
-          txId: result.txId,
-          encrypted: true,
-          unixTs,
-        });
-
-        // Wait for transaction to be confirmed via wallet status check (supports shield_ IDs)
-        setState((s) => ({ ...s, step: 'blockchain', txId: result.txId || null }));
-        let confirmed = false;
-        let finalStatus = 'unknown';
-        for (let i = 0; i < 20; i++) {
-          await new Promise(r => setTimeout(r, 3000));
-          const statusResult = await wallet.checkTransactionStatus(result.txId || '');
-          finalStatus = statusResult.status;
-          console.debug(`[ZKDrop] TX status check ${i + 1}/20: ${result.txId} → ${finalStatus}`);
-          if (finalStatus === 'confirmed') {
-            confirmed = true;
-            break;
-          }
-          if (finalStatus === 'rejected' || finalStatus === 'failed') {
-            console.error(`[ZKDrop] Transaction ${result.txId} was ${finalStatus}`);
-            break;
-          }
+      if (!result.txId) {
+        if (result.error.includes('user rejected')) {
+          throw new Error('Transaction cancelled by user.');
         }
-
-        if (confirmed) {
-          // Transaction confirmed — verify file appears on-chain via RPC
-          const { getFileOwner } = await import('@/lib/zkdrop');
-          let ownerFound = false;
-          for (let i = 0; i < 10; i++) {
-            await new Promise(r => setTimeout(r, 3000));
-            const owner = await getFileOwner(fileKey);
-            if (owner) {
-              console.debug(`[ZKDrop] File confirmed on-chain: fileKey=${fileKey}, owner=${owner}`);
-              ownerFound = true;
-              break;
-            }
-          }
-          if (!ownerFound) {
-            console.warn(`[ZKDrop] TX confirmed but file not yet visible in file_owners mapping for fileKey=${fileKey}`);
-          }
-          setState((s) => ({ ...s, step: 'success', fileId }));
-        } else {
-          console.warn(`[ZKDrop] Transaction ${result.txId} status: ${finalStatus} — file may still be pending on-chain.`);
-          setState((s) => ({ ...s, step: 'success', fileId }));
-        }
-      } else if (result.error && result.error.includes('user rejected')) {
-        throw new Error('Transaction cancelled by user.');
-      } else if (result.error) {
-        throw new Error(result.error || 'Transaction failed — no txId returned');
-      } else if (result.error && result.error.includes('user rejected')) {
-        throw new Error('Transaction cancelled by user.');
-      } else if (result.error) {
-        throw new Error(result.error || 'Transaction failed — no txId returned');
-      } else {
-        throw new Error('Transaction failed — no txId and no error returned. Check wallet status.');
+        throw new Error(result.error || 'Transaction failed: no transaction id returned.');
       }
+
+      if (isWalletLocalTransactionId(result.txId)) {
+        console.warn(`[ZKDrop] Wallet returned local tx id: ${result.txId} — transaction may not be submitted to network yet`);
+      }
+
+      storeEncryptionKey(fileId, {
+        key: keyBase64,
+        iv: ivBase64,
+        originalName: state.file.name,
+      });
+
+      registerFile({
+        fileId,
+        fileKey,
+        cid,
+        name: state.file.name,
+        price: normalizedPrice,
+        txId: result.txId ?? '',
+        encrypted: true,
+        unixTs,
+        ownerAddress: wallet.address,
+      });
+
+      setState((current) => ({ ...current, step: 'blockchain', txId: result.txId ?? null }));
+
+      const confirmResult = await waitForOnChainConfirmation(
+        fileKey,
+        // Retry every 3s: 30 retries = ~1.5 min for shield_ IDs (wallet polling)
+        // or 20 retries = ~1 min for real at1... IDs (RPC polling)
+        isWalletLocalTransactionId(result.txId) ? 30 : 20,
+        result.txId ?? undefined,
+        wallet.checkTransactionStatus
+      );
+
+      if (confirmResult.rejected) {
+        // Transaction was submitted but rejected on-chain — show specific error
+        setState((current) => ({
+          ...current,
+          step: 'error',
+          error: `Blockchain rejected the transaction: ${confirmResult.reason ?? 'contract execution failed'}. The file is still stored on IPFS but not on Aleo.`,
+        }));
+        return;
+      }
+
+      setState((current) => ({
+        ...current,
+        step: 'success',
+        fileId,
+        fileKey,
+        txId: result.txId ?? null,
+        confirmationStatus: confirmResult.confirmed ? 'confirmed' : 'pending',
+      }));
     } catch (error) {
       console.error('[ZKDrop] Upload error:', error);
-      setState((s) => ({
-        ...s,
+      setState((current) => ({
+        ...current,
         step: 'error',
-        error: String(error),
+        error: error instanceof Error ? error.message : String(error),
       }));
     }
-  };
-
-  const reset = () => {
-    setState({ step: 'idle', file: null, ipfsCid: null, txId: null, error: null, fileId: null });
-    setPrice('');
-    setFileName('');
-  };
+  }, [price, state.file, wallet]);
 
   const steps = [
     { key: 'ipfs', label: 'IPFS Upload' },
     { key: 'blockchain', label: 'Aleo Blockchain' },
     { key: 'success', label: 'Complete' },
   ];
-  const stepOrder = ['uploading', 'ipfs', 'blockchain', 'success', 'error'];
+  const stepOrder: UploadStep[] = ['uploading', 'ipfs', 'blockchain', 'success', 'error'];
   const currentStepIndex = Math.max(0, stepOrder.indexOf(state.step));
 
   if (!wallet.isConnected) {
@@ -239,11 +245,11 @@ export default function UploadPage() {
           </Button>
           <div className="mt-4 flex justify-center gap-2">
             <Badge variant="success" size="sm">
-              <Shield className="h-3 w-3 mr-1" />
+              <Shield className="mr-1 h-3 w-3" />
               Shield Wallet
             </Badge>
             <Badge variant="info" size="sm">
-              <Coins className="h-3 w-3 mr-1" />
+              <Coins className="mr-1 h-3 w-3" />
               credits.aleo
             </Badge>
           </div>
@@ -255,41 +261,32 @@ export default function UploadPage() {
   return (
     <div className="min-h-[80vh] py-12">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 text-center"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-green-900">Upload Files</h1>
           <p className="mt-2 text-gray-600">
             Upload to IPFS and register on Aleo. Your file data and access lists stay private.
           </p>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             <Badge variant="success" size="sm">
-              <KeyRound className="h-3 w-3 mr-1" />
+              <KeyRound className="mr-1 h-3 w-3" />
               AES-256-GCM Encrypted
             </Badge>
             <Badge variant="info" size="sm">
               IPFS Storage
             </Badge>
             <Badge variant="default" size="sm">
-              <Shield className="h-3 w-3 mr-1" />
+              <Shield className="mr-1 h-3 w-3" />
               {wallet.walletType}
             </Badge>
           </div>
         </motion.div>
 
-        {/* Progress steps */}
         {state.step !== 'idle' && state.step !== 'error' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-8 flex items-center justify-center gap-2"
-          >
-            {steps.map((step, i) => {
-              const isComplete = i < currentStepIndex - 1;
-              const isActive = i === currentStepIndex - 1;
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-8 flex items-center justify-center gap-2">
+            {steps.map((step, index) => {
+              const isComplete = index < currentStepIndex - 1;
+              const isActive = index === currentStepIndex - 1;
+
               return (
                 <div key={step.key} className="flex items-center gap-2">
                   <div
@@ -297,23 +294,22 @@ export default function UploadPage() {
                       isComplete
                         ? 'bg-green-500 text-white'
                         : isActive
-                        ? 'bg-green-100 text-green-600 ring-2 ring-green-500 animate-pulse'
-                        : 'bg-gray-100 text-gray-400'
+                          ? 'bg-green-100 text-green-600 ring-2 ring-green-500 animate-pulse'
+                          : 'bg-gray-100 text-gray-400'
                     }`}
                   >
-                    {isComplete ? '✓' : i + 1}
+                    {isComplete ? 'OK' : index + 1}
                   </div>
-                  <span className={`text-sm ${i < currentStepIndex - 1 ? 'text-green-600' : 'text-gray-400'}`}>
+                  <span className={`text-sm ${index < currentStepIndex - 1 ? 'text-green-600' : 'text-gray-400'}`}>
                     {step.label}
                   </span>
-                  {i < steps.length - 1 && <div className="h-px w-8 bg-gray-200" />}
+                  {index < steps.length - 1 && <div className="h-px w-8 bg-gray-200" />}
                 </div>
               );
             })}
           </motion.div>
         )}
 
-        {/* Drop zone */}
         {state.step === 'idle' && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-2 border-dashed border-green-200 bg-green-50/50">
@@ -326,25 +322,18 @@ export default function UploadPage() {
                 }`}
               >
                 <input {...getInputProps()} />
-                <Upload className="mx-auto h-12 w-12 text-green-400 mb-4" />
+                <Upload className="mx-auto mb-4 h-12 w-12 text-green-400" />
                 <p className="text-lg font-medium text-green-800">
-                  {isDragActive ? 'Drop your file here' : 'Drag & drop a file'}
+                  {isDragActive ? 'Drop your file here' : 'Drag and drop a file'}
                 </p>
-                <p className="mt-1 text-sm text-gray-500">
-                  or click to browse · Max 100MB
-                </p>
+                <p className="mt-1 text-sm text-gray-500">or click to browse - Max 100MB</p>
               </div>
             </Card>
           </motion.div>
         )}
 
-        {/* File selected */}
         {state.file && state.step !== 'success' && state.step !== 'error' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="space-y-6"
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
             <Card className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100">
@@ -352,9 +341,7 @@ export default function UploadPage() {
                 </div>
                 <div>
                   <p className="font-medium text-green-900">{state.file.name}</p>
-                  <p className="text-sm text-gray-500">
-                    {(state.file.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
+                  <p className="text-sm text-gray-500">{(state.file.size / 1024 / 1024).toFixed(2)} MB</p>
                 </div>
               </div>
               <button
@@ -367,10 +354,10 @@ export default function UploadPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Access Control & Pricing</CardTitle>
+                <CardTitle>Access Control and Pricing</CardTitle>
                 <CardDescription>
-                  Set an optional price in Aleo Credits. Leave empty for free access.
-                  Access control uses ZK proofs — only access grants are recorded on-chain.
+                  Set an optional price in Aleo Credits. Leave empty for free access. Access grants are recorded
+                  on-chain without exposing the file contents.
                 </CardDescription>
               </CardHeader>
               <div className="space-y-4">
@@ -379,12 +366,11 @@ export default function UploadPage() {
                   type="number"
                   placeholder="0.00"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={(event) => setPrice(event.target.value)}
                   icon={<Coins className="h-4 w-4" />}
                 />
                 <p className="text-xs text-gray-500">
-                  Access list is private by default. Payment via{' '}
-                  <code className="bg-gray-100 px-1 rounded">credits.aleo</code>.
+                  Access list is private by default. Payment uses <code className="rounded bg-gray-100 px-1">credits.aleo</code>.
                 </p>
               </div>
             </Card>
@@ -398,7 +384,7 @@ export default function UploadPage() {
               {state.step === 'blockchain' ? (
                 <>
                   <Shield className="h-5 w-5" />
-                  Confirm in {wallet.walletType}...
+                  Submitting to {wallet.walletType}...
                 </>
               ) : (
                 <>
@@ -408,38 +394,73 @@ export default function UploadPage() {
               )}
             </Button>
 
-            {state.ipfsCid && (
-              <p className="text-center text-xs text-gray-500">
-                IPFS: {state.ipfsCid}
-              </p>
-            )}
+            {state.ipfsCid && <p className="text-center text-xs text-gray-500">IPFS: {state.ipfsCid}</p>}
           </motion.div>
         )}
 
-        {/* Success */}
         {state.step === 'success' && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
             <Card className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
-              <CardTitle className="text-xl">File Uploaded Successfully!</CardTitle>
+              <CardTitle className="text-xl">
+                {state.confirmationStatus === 'confirmed' ? 'File Confirmed on Aleo' : 'File Submitted Successfully'}
+              </CardTitle>
               <CardDescription className="mt-2">
-                Your file is AES-256-GCM encrypted, stored on IPFS, and registered on Aleo with private access control.
+                {state.confirmationStatus === 'confirmed'
+                  ? 'Your encrypted file is stored on IPFS and visible in Aleo mappings.'
+                  : 'Your encrypted file is stored on IPFS and saved locally. Aleo confirmation is still pending.'}
               </CardDescription>
 
               <div className="mt-6 space-y-3 text-left">
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 mb-1">IPFS CID</p>
-                  <p className="font-mono text-sm text-green-800 break-all">{state.ipfsCid}</p>
+                  <p className="mb-1 text-xs text-gray-500">IPFS CID</p>
+                  <p className="break-all font-mono text-sm text-green-800">{state.ipfsCid}</p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 mb-1">Transaction ID</p>
-                  <p className="font-mono text-sm text-green-800 break-all">{state.txId}</p>
+                  <p className="mb-1 text-xs text-gray-500">Transaction ID</p>
+                  <p className="break-all font-mono text-sm text-green-800">{state.txId}</p>
                 </div>
-                <div className="rounded-lg bg-green-50 p-4 border border-green-200">
-                  <p className="text-xs text-green-600 mb-1 font-medium">ZKDrop Contract</p>
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <p className="mb-1 text-xs font-medium text-green-600">ZKDrop Contract</p>
                   <p className="font-mono text-sm text-green-800">{aleoConfig.programs.zkdrop}</p>
+                </div>
+                <div
+                  className={`rounded-lg border p-4 ${
+                    state.confirmationStatus === 'confirmed'
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-amber-200 bg-amber-50'
+                  }`}
+                >
+                  <p
+                    className={`mb-1 text-xs font-medium ${
+                      state.confirmationStatus === 'confirmed' ? 'text-green-700' : 'text-amber-700'
+                    }`}
+                  >
+                    On-chain Status
+                  </p>
+                  <p
+                    className={`text-sm ${
+                      state.confirmationStatus === 'confirmed' ? 'text-green-800' : 'text-amber-800'
+                    }`}
+                  >
+                    {state.confirmationStatus === 'confirmed'
+                      ? 'Confirmed in file_owners and ready to share.'
+                      : 'Pending confirmation. It will still appear in your dashboard as a pending upload.'}
+                  </p>
+                  {state.confirmationStatus === 'pending' && (
+                    <Button
+                      onClick={handleCheckStatus}
+                      isLoading={checkingStatus}
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      {checkingStatus ? 'Checking...' : 'Check Status Now'}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -455,10 +476,9 @@ export default function UploadPage() {
           </motion.div>
         )}
 
-        {/* Error */}
         {state.step === 'error' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <Card className="text-center border-red-200 bg-red-50">
+            <Card className="border-red-200 bg-red-50 text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100">
                 <AlertCircle className="h-8 w-8 text-red-600" />
               </div>
@@ -473,12 +493,4 @@ export default function UploadPage() {
       </div>
     </div>
   );
-}
-
-function nameToBytes(name: string): number[] {
-  const bytes: number[] = [];
-  for (let i = 0; i < 64; i++) {
-    bytes.push(i < name.length ? name.charCodeAt(i) : 0);
-  }
-  return bytes;
 }

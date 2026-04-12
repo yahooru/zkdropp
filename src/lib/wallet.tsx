@@ -23,6 +23,30 @@ import { PuzzleWalletAdapter } from '@provablehq/aleo-wallet-adaptor-puzzle';
 import { Network } from '@provablehq/aleo-types';
 import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import type { TransactionOptions } from '@provablehq/aleo-types';
+import { isWalletLocalTransactionId } from './utils';
+
+type SupportedWalletAdapter =
+  | ShieldWalletAdapter
+  | LeoWalletAdapter
+  | SoterWalletAdapter
+  | PuzzleWalletAdapter;
+
+interface WalletTransactionLike {
+  status?: string;
+}
+
+interface WalletRecordLike {
+  ciphertext?: string;
+  decryptedValue?: string;
+  plaintext?: string;
+  record?: string;
+  recordCiphertext?: string;
+}
+
+interface AleoWalletExtensions {
+  requestRecords?: (programId: string, includeCiphertext?: boolean) => Promise<WalletRecordLike[] | undefined>;
+  transactionStatus?: (txId: string) => Promise<WalletTransactionLike | undefined>;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -48,8 +72,8 @@ export interface ZKDropWalletState {
   getFileRecords: () => Promise<{ plaintext: string; ciphertext: string }[]>;
   /** Poll the Aleo RPC until a transaction is confirmed on-chain. Returns true if confirmed, false if timeout. */
   waitForTxConfirmation: (txId: string, maxRetries?: number) => Promise<boolean>;
-  /** Check transaction status directly via the wallet adapter (supports shield_ IDs). */
-  checkTransactionStatus: (txId: string) => Promise<{ status: string; error?: string }>;
+  /** Check transaction status directly via the wallet adapter (supports shield_ IDs). Returns transactionId (the real at1... ID) when accepted. */
+  checkTransactionStatus: (txId: string) => Promise<{ status: string; transactionId?: string; error?: string }>;
 }
 
 const ZKDropWalletContext = createContext<ZKDropWalletState>({
@@ -92,7 +116,7 @@ export interface WalletInfo {
   name: string;
   icon: string;
   description: string;
-  getAdapter: () => any;
+  getAdapter: () => SupportedWalletAdapter;
 }
 
 const WALLET_CONFIGS: WalletInfo[] = [
@@ -166,6 +190,7 @@ export function ZKDropWalletProvider({ children }: { children: React.ReactNode }
 
 function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
   const aleo = useAleoWallet();
+  const aleoExtended = aleo as typeof aleo & AleoWalletExtensions;
   const { setVisible: setModalVisible } = useWalletModal();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
@@ -197,7 +222,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
       const networkClient = new AleoNetworkClient(aleoConfig.rpcUrl);
       const balance = await networkClient.getProgramMappingValue(programId, 'account', address);
       return balance ? BigInt(balance) : BigInt(0);
-    } catch (error) {
+    } catch {
       return BigInt(0);
     }
   }, [address]);
@@ -234,9 +259,9 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     txId: string,
     maxRetries: number = 20
   ): Promise<boolean> => {
-    if (!txId || txId.startsWith('shield_')) {
+    if (!txId || isWalletLocalTransactionId(txId)) {
       // Wallet-local ID — cannot verify on-chain, assume pending
-      console.warn(`[ZKDrop] Cannot verify shield_ prefixed ID on-chain: ${txId}`);
+      console.warn(`[ZKDrop] Cannot verify wallet-local tx id on-chain: ${txId}`);
       return false;
     }
     try {
@@ -245,7 +270,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
       for (let i = 0; i < maxRetries; i++) {
         await new Promise(r => setTimeout(r, 3000));
         try {
-          const tx = await client.getTransaction(txId) as any;
+          const tx = await client.getTransaction(txId) as WalletTransactionLike | null;
           if (tx && tx.status === 'confirmed') {
             console.debug(`[ZKDrop] Transaction confirmed on-chain: ${txId}`);
             return true;
@@ -266,33 +291,40 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
   // This calls the wallet's internal transactionStatus which may return 'confirmed', 'pending', etc.
   const checkTransactionStatus = useCallback(async (
     txId: string
-  ): Promise<{ status: string; error?: string }> => {
+  ): Promise<{ status: string; transactionId?: string; error?: string }> => {
     if (!isConnected) return { status: 'not_connected', error: 'Wallet not connected' };
     // Use the adapter's transactionStatus if available (supports shield_ IDs)
-    if (typeof (aleo as any).transactionStatus === 'function') {
+    if (typeof aleoExtended.transactionStatus === 'function') {
       try {
-        const result = await (aleo as any).transactionStatus(txId);
+        const result = await aleoExtended.transactionStatus(txId);
         console.debug(`[ZKDrop] checkTransactionStatus(${txId}):`, result);
-        return { status: result?.status || 'unknown' };
+        // result.transactionId contains the real on-chain 'at1...' ID when accepted
+        return {
+          status: result?.status || 'unknown',
+          transactionId: result?.transactionId,
+        };
       } catch (error) {
         const msg = String(error);
         console.warn(`[ZKDrop] checkTransactionStatus error for ${txId}:`, msg);
+        if (isWalletLocalTransactionId(txId) && msg.toLowerCase().includes('not found')) {
+          return { status: 'pending', error: msg };
+        }
         return { status: 'error', error: msg };
       }
     }
     // Fallback: try RPC-based polling for on-chain transaction IDs
-    if (!txId.startsWith('shield_')) {
+    if (!isWalletLocalTransactionId(txId)) {
       try {
         const { AleoNetworkClient } = await import('@provablehq/sdk');
         const client = new AleoNetworkClient(aleoConfig.rpcUrl);
-        const tx = await client.getTransaction(txId) as any;
+        const tx = await client.getTransaction(txId) as WalletTransactionLike | null;
         return { status: tx?.status || 'not_found' };
       } catch {
         return { status: 'not_found', error: 'Transaction not found on-chain' };
       }
     }
     return { status: 'pending', error: 'Wallet adapter does not support transactionStatus' };
-  }, [aleo, isConnected]);
+  }, [aleoExtended, isConnected]);
 
   // Transfer Aleo Credits
   // NOTE (RH1): Uses transfer_public — amount and recipient are visible on-chain.
@@ -342,13 +374,16 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
     if (!isConnected || !address) return [];
     try {
       // aleo.requestRecords is available on the base wallet hook
-      const records = await (aleo as any).requestRecords?.(aleoConfig.programs.zkdrop, true);
+      const records = (await aleoExtended.requestRecords?.(
+        aleoConfig.programs.zkdrop,
+        true
+      )) as WalletRecordLike[] | undefined;
       if (!records || records.length === 0) {
         console.debug(`[ZKDrop] getFileRecords: no records found for ${aleoConfig.programs.zkdrop}`);
         return [];
       }
       console.debug(`[ZKDrop] getFileRecords: found ${records.length} records`);
-      return records.map((r: any) => {
+      return records.map((r: WalletRecordLike) => {
         const plaintext = r.plaintext || r.decryptedValue || '';
         const ciphertext = r.record || r.recordCiphertext || r.ciphertext || '';
         console.debug(`[ZKDrop] Record: hasPlaintext=${!!plaintext}, hasCiphertext=${!!ciphertext}`);
@@ -358,7 +393,7 @@ function ZKDropWalletInner({ children }: { children: React.ReactNode }) {
       console.error('[ZKDrop] getFileRecords error:', error);
       return [];
     }
-  }, [isConnected, address, aleo]);
+  }, [isConnected, address, aleoExtended]);
 
 
   // delete_file: requires FileRecord as last parameter.
